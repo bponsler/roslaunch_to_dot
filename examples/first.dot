@@ -1,0 +1,64 @@
+digraph first_launch_graph {
+    /**
+      * This dot file was automatically generated on 2016-01-14 23:20:51.542741
+      * By the command:
+      *    ./roslaunch-to-dot.py --png /home/bponsler/sandbox/catkin_ws/src/pkg_one/launch/first.launch examples/first.dot
+      *
+      * This launch graph has the following properties:
+      *    - it contains 3 ROS packages
+      *    - it contains 3 ROS launch files
+      *    - it contains 5 ROS nodes
+     */
+    graph [fontsize=35, ranksep=2, nodesep=2];
+    node [fontsize=35];
+    compound=true;
+
+    // Subgraph for package: pkg_one
+    subgraph cluster_0 {
+        label="pkg_one";
+        penwidth=5;  // Thicker borders on clusters
+
+        // Launch files contained in this package
+        "launch_first" [label="first.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
+
+        // ROS nodes contained in this package
+        "node_node-1" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-3" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+    }
+
+    // Subgraph for package: pkg_two
+    subgraph cluster_1 {
+        label="pkg_two";
+        penwidth=5;  // Thicker borders on clusters
+
+        // Launch files contained in this package
+        "launch_second" [label="second.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
+
+        // ROS nodes contained in this package
+        "node_node-2" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-5" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+    }
+
+    // Subgraph for package: pkg_three
+    subgraph cluster_2 {
+        label="pkg_three";
+        penwidth=5;  // Thicker borders on clusters
+
+        // Launch files contained in this package
+        "launch_third" [label="third.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
+
+        // ROS nodes contained in this package
+        "node_node-4" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+    }
+
+    // Add connections between launch files
+    "launch_first" -> "launch_second" [penwidth=3, color=black];
+    "launch_second" -> "launch_third" [penwidth=3, color=black];
+
+    // Add connections between launch files and nodes
+    "launch_first" -> "node_node-1" [penwidth=3];
+    "launch_second" -> "node_node-3" [penwidth=3];
+    "launch_first" -> "node_node-2" [penwidth=3];
+    "launch_third" -> "node_node-5" [penwidth=3];
+    "launch_second" -> "node_node-4" [penwidth=3];
+}
