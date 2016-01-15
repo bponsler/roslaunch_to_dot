@@ -406,6 +406,11 @@ class LaunchFile:
         numNodes = self.getNumNodes()
         numRosParamFiles = self.getNumRosParamFiles()
 
+        # If rosparam files are not being shown then there aren't any
+        # ndoes contained in the graph
+        if not self.__inputArgs.showRosParamNodes:
+            numRosParamFiles = 0
+
         # Name the graph after the original launch file
         cleanName = self.getCleanName()
 
@@ -438,33 +443,34 @@ class LaunchFile:
             dotLines.extend(subgraphLines)
 
         #### Add one node per rosparam file needed for all launch files
-        dotLines.extend([
-            '',
-            '    // Add nodes for all included rosparam files',
-        ])
+        if self.__inputArgs.showRosParamNodes:
+            dotLines.extend([
+                '',
+                '    // Add nodes for all included rosparam files',
+            ])
 
-        # Iterate over all packages contained in the launch tree
-        for _, packageTuple in packageMap.iteritems():
-            launchFiles, _nodes = packageTuple
+            # Iterate over all packages contained in the launch tree
+            for _, packageTuple in packageMap.iteritems():
+                launchFiles, _nodes = packageTuple
 
-            # Iterate over all launch files in this package
-            for launchFile in launchFiles:
-                # Iterate over all rosparam files needed by the launch file
-                for rosParam in launchFile.__rosParamFiles:
-                    name = basename(rosParam.filename)
+                # Iterate over all launch files in this package
+                for launchFile in launchFiles:
+                    # Iterate over all rosparam files needed by the launch file
+                    for rosParam in launchFile.__rosParamFiles:
+                        name = basename(rosParam.filename)
 
-                    # Clean the name for use as a node name
-                    cleanName = name.replace(".", "_")
+                        # Clean the name for use as a node name
+                        cleanName = name.replace(".", "_")
 
-                    # Get the attributes for this node
-                    attributeStr = self.__getAttributeStr([
-                        'label="%s"' % name,
-                    ])
+                        # Get the attributes for this node
+                        attributeStr = self.__getAttributeStr([
+                            'label="%s"' % name,
+                        ])
 
-                    # Create a node for this rosparam file
-                    dotLines.extend([
-                        '    "yaml_%s" [%s];' % (cleanName, attributeStr),
-                    ])
+                        # Create a node for this rosparam file
+                        dotLines.extend([
+                            '    "yaml_%s" [%s];' % (cleanName, attributeStr),
+                        ])
 
         #### Create connections between all launch files
         dotLines.extend([
@@ -566,67 +572,69 @@ class LaunchFile:
                 ])
 
         #### Create connections between launch files and rosparam files
-        dotLines.extend([
-            '',
-            '    // Add connections between launch files and rosparam files',
-        ])
+        if self.__inputArgs.showRosParamNodes:
+            dotLines.extend([
+                '',
+                '    // Add connections between launch files and rosparam files',
+            ])
 
-        # Iterate over all packages contained in the launch tree
-        for _, packageTuple in packageMap.iteritems():
-            launchFiles, _nodes = packageTuple
+            # Iterate over all packages contained in the launch tree
+            for _, packageTuple in packageMap.iteritems():
+                launchFiles, _nodes = packageTuple
 
-            # Iterate over all launch files in this package
-            for launchFile in launchFiles:
-                cleanLaunchFile = launchFile.getCleanName()
+                # Iterate over all launch files in this package
+                for launchFile in launchFiles:
+                    cleanLaunchFile = launchFile.getCleanName()
 
-                # Iterate over all rosparam files needed by the launch file
-                for rosParam in launchFile.__rosParamFiles:
-                    name = basename(rosParam.filename)
+                    # Iterate over all rosparam files needed by the launch file
+                    for rosParam in launchFile.__rosParamFiles:
+                        name = basename(rosParam.filename)
 
-                    # Clean the name for use as a node name
-                    cleanName = name.replace(".", "_")
+                        # Clean the name for use as a node name
+                        cleanName = name.replace(".", "_")
 
-                    # Default attributes
-                    attributes = []
-                    color = self.LineColor
+                        # Default attributes
+                        attributes = []
+                        color = self.LineColor
 
-                    # Grab the set of arg substitutions used to conditionally
-                    # include the launch file so that the edge can be labeled
-                    # and styled accordingly
-                    argSubs = rosParam.argSubs
-                    if len(argSubs) > 0:
-                        # Change the color of the line to indicate that it
-                        # required arg substitutions
-                        color = self.ConditionalLineColor
+                        # Grab the set of arg substitutions used to
+                        # conditionally include the launch file so that the
+                        # edge can be labeled and styled accordingly
+                        argSubs = rosParam.argSubs
+                        if len(argSubs) > 0:
+                            # Change the color of the line to indicate that it
+                            # required arg substitutions
+                            color = self.ConditionalLineColor
 
-                        # Convert all arg name value pairs into a single
-                        # string, e.g., given {"one": "two", "three": "four"}
-                        # the resulting string should be:
-                        #    "one:=two\nthree:=four"
-                        # So that each arg pair is on its own line
-                        # for improved readability
-                        argSubsStr = '\n'.join(map(
-                            lambda t: ":=".join(map(str, t)), argSubs.items()))
+                            # Convert all arg name value pairs into a single
+                            # string, e.g., given {"one": "2", "three": "4"}
+                            # the resulting string should be:
+                            #    "one:=2\nthree:=4"
+                            # So that each arg pair is on its own line
+                            # for improved readability
+                            argSubsStr = '\n'.join(map(
+                                lambda t: ":=".join(map(str, t)),
+                                argSubs.items()))
 
-                        # Label the edge with the arguments needed to
-                        # resolve the file
+                            # Label the edge with the arguments needed to
+                            # resolve the file
+                            attributes.extend([
+                                'label="%s"' % argSubsStr,
+                                ])
+
+                        # Create the attributes for this edge
                         attributes.extend([
-                            'label="%s"' % argSubsStr,
-                            ])
+                            'color="%s"' % color,
+                        ])
 
-                    # Create the attributes for this edge
-                    attributes.extend([
-                        'color="%s"' % color,
-                    ])
+                        # Convert the attributes into a string
+                        attributeStr = self.__getAttributeStr(attributes)
 
-                    # Convert the attributes into a string
-                    attributeStr = self.__getAttributeStr(attributes)
-
-                    # Create a node for this rosparam file
-                    dotLines.extend([
-                        '    "launch_%s" -> "yaml_%s" [%s];' % \
+                        # Create a node for this rosparam file
+                        dotLines.extend([
+                            '    "launch_%s" -> "yaml_%s" [%s];' % \
                                     (cleanLaunchFile, cleanName, attributeStr),
-                    ])
+                        ])
 
         dotLines.extend([
             '}',  # end of digraph
