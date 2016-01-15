@@ -1,6 +1,6 @@
 digraph first_launch_graph {
     /**
-      * This dot file was automatically generated on 2016-01-14 23:20:51.542741
+      * This dot file was automatically generated on 2016-01-14 23:25:36.936852
       * By the command:
       *    ./roslaunch-to-dot.py --png /home/bponsler/sandbox/catkin_ws/src/pkg_one/launch/first.launch examples/first.dot
       *
@@ -22,8 +22,8 @@ digraph first_launch_graph {
         "launch_first" [label="first.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
 
         // ROS nodes contained in this package
-        "node_node-1" [shape=rectangle, style=filled, fillcolor="#6495ed"];
-        "node_node-3" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-1" [label="node-1" shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-3" [label="node-3" shape=rectangle, style=filled, fillcolor="#6495ed"];
     }
 
     // Subgraph for package: pkg_two
@@ -35,8 +35,8 @@ digraph first_launch_graph {
         "launch_second" [label="second.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
 
         // ROS nodes contained in this package
-        "node_node-2" [shape=rectangle, style=filled, fillcolor="#6495ed"];
-        "node_node-5" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-2" [label="node-2" shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-5" [label="node-5" shape=rectangle, style=filled, fillcolor="#6495ed"];
     }
 
     // Subgraph for package: pkg_three
@@ -48,7 +48,7 @@ digraph first_launch_graph {
         "launch_third" [label="third.launch", shape=rectangle, style=filled, fillcolor="#d3d3d3"];
 
         // ROS nodes contained in this package
-        "node_node-4" [shape=rectangle, style=filled, fillcolor="#6495ed"];
+        "node_node-4" [label="node-4" shape=rectangle, style=filled, fillcolor="#6495ed"];
     }
 
     // Add connections between launch files
