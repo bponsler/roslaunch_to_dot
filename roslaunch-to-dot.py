@@ -4,17 +4,26 @@ file based on the tree of nodes and launch files that will be launched
 based on the input launch file.
 
     $ ./roslaunch-to-dot.py --help
-    usage: roslaunch-to-dot.py [-h] [--png] launchFile outputFile
+    usage: roslaunch-to-dot.py [-h] [--png] [--show-node-type]
+                               [--show-rosparam-nodes]
+                               launchFile outputFile [arg [arg ...]]
 
     Create a dot graph file from a ROS launch file.
 
     positional arguments:
-      launchFile  path to the desired launch file
-      outputFile  the output dot file to save
+      launchFile            path to the desired launch file
+      outputFile            the output dot file to save
+      arg                   override an arg specified anywhere in the launch
+                            file tree
 
     optional arguments:
-      -h, --help  show this help message and exit
-      --png       automatically convert the dot file to a PNG
+      -h, --help            show this help message and exit
+      --png                 automatically convert the dot file to a PNG
+      --show-node-type      label ROS nodes with their type in addition to
+                            thier name
+      --show-rosparam-nodes
+                            display nodes and connections for all rosparam
+                            files used
 
 '''
 import re
@@ -31,6 +40,13 @@ import xml.etree.ElementTree as ET
 from os.path import exists, basename, splitext, sep
 
 
+# Keep track of a global set of launch files that have already been
+# visited so that we can protect ourselves from entering into an
+# infinite loop of launch files if there happens to be a recursive
+# cycle in the graph
+VISITED_LAUNCH_FILES = set()
+
+
 # Create a named tuple to store attributes pertaining to a node
 Node = namedtuple("Node", [
     "launchFile",  # The launch file that contains this node
@@ -40,11 +56,11 @@ Node = namedtuple("Node", [
     "isTestNode"])  # True if this is a test node, False otherwise
 
 
-# Keep track of a global set of launch files that have already been
-# visited so that we can protect ourselves from entering into an
-# infinite loop of launch files if there happens to be a recursive
-# cycle in the graph
-VISITED_LAUNCH_FILES = set()
+# Create a named tuple to store attributes pertaining to a rosparam file
+RosParam = namedtuple("RosParamFile", [
+    "filename",   # The resolved filename for the rosparam file
+    "argSubs",  # The dictionary of argument substitutions needed for the file
+    ])
 
 
 class LaunchFile:
@@ -66,9 +82,11 @@ class LaunchFile:
     GroupTag = "group"
     IncludeTag = "include"
     NodeTag = "node"
+    RosParamTag = "rosparam"
     TestTag = "test"
 
     # Identifiers used as element attribute names within a launch file
+    CommandAttribute = "command"
     DefaultAttribute = "default"
     FileAttribute = "file"
     IfAttribute = "if"
@@ -87,17 +105,36 @@ class LaunchFile:
     FindSubstitutionArg = "find"
     OptEnvSubstitutionArg = "optenv"
 
+    # Identifiers for various rosparam commands
+    DumpCommand = "dump"
+    LoadCommand = "load"
+
     # Colors used within the dot graph
+    ConditionalLineColor = "#ff8c00"
+    CycleLineColor = "red"
     LaunchFileColor = "#d3d3d3"
+    LineColor = "black"
     MissingFileColor = "#cc0000"
     NodeColor = "#6495ed"
     TestNodeColor = "#009900"
 
-    def __init__(self, filename):
+    def __init__(self, args, filename, includeArgs=None, overrideArgs=None):
         '''
+        * args -- command line arguments
         * filename -- the ROS launch file
+        * includeArgs -- dictionary of arg substitution name value pairs
+                         that were used to resolve the name of this launch file
+        * overrideArgs -- dictionary of arguments that override any
+                          arguments specified in this launch file
 
         '''
+        self.__inputArgs = args
+
+        # Cannot use dictionary in default argument because the same
+        # object will get reused
+        self.__includeArgs = {} if includeArgs is None else includeArgs
+        self.__overrideArgs = {} if overrideArgs is None else overrideArgs
+
         # Determine if this launch file has been parsed before
         hasVisited = (filename in VISITED_LAUNCH_FILES)
 
@@ -129,10 +166,11 @@ class LaunchFile:
         # in the graph
         self.__cycles = []
 
-        # List of nodes associated with this launch file. Each node in the
-        # list is a namedtuple with the following properties:
-        #     launchFile, package, nodeType, name, isTestNode
+        # List of Node namedtuple objects associated with this launch file
         self.__nodes = []
+
+        # List of RosParam namedtuplem objects included by this launch file
+        self.__rosParamFiles = []
 
         # Protect against cycles in the launch files
         if not hasVisited:
@@ -141,7 +179,7 @@ class LaunchFile:
                 # Only parse if the file exists
                 self.__parseLaunchFile(filename)
             else:
-                print "WARNING: Could not locate included launch " \
+                print "WARNING: Could not locate launch " \
                     "file: %s" % self.__filename
 
     #### Getter functions
@@ -218,6 +256,23 @@ class LaunchFile:
 
         return allNodes
 
+    def getAllRosParamFiles(self):
+        '''Get the entire list of rosparam files included because of
+        this launch file.
+
+        '''
+        rosParamFiles = []
+
+        # Add our own rosparam files
+        for rosParam in self.__rosParamFiles:
+            rosParamFiles.append(rosParam)
+
+        # Recursively add all of our children's rosparam files
+        for launchFile in self.__includes:
+            rosParamFiles.extend(launchFile.getAllRosParamFiles())
+
+        return rosParamFiles
+
     def getNumNodes(self):
         '''Get the number of unique ROS nodes that this launch tree contains.
 
@@ -242,6 +297,19 @@ class LaunchFile:
             uniqueLaunchFiles.add(launchFile.getFilename())
 
         return len(uniqueLaunchFiles)
+
+    def getNumRosParamFiles(self):
+        '''Get the number of unique rosparam files that this launch
+        graph contains.
+
+        '''
+        allRosParamFiles = self.getAllRosParamFiles()
+
+        uniqueFiles = set()
+        for rosParam in allRosParamFiles:
+            uniqueFiles.add(rosParam.filename)
+
+        return len(uniqueFiles)
 
     def getIncludeMap(self):
         '''Return the dictionary mapping launch filenames to the list
@@ -336,6 +404,7 @@ class LaunchFile:
         numPackages = len(packageMap)
         numLaunchFiles = self.getNumLaunchFiles()
         numNodes = self.getNumNodes()
+        numRosParamFiles = self.getNumRosParamFiles()
 
         # Name the graph after the original launch file
         cleanName = self.getCleanName()
@@ -353,6 +422,7 @@ class LaunchFile:
             '      *    - it contains %s ROS packages' % numPackages,
             '      *    - it contains %s ROS launch files' % numLaunchFiles,
             '      *    - it contains %s ROS nodes' % numNodes,
+            '      *    - it contains %s rosparam files' % numRosParamFiles,
             '     */',
             '    graph [fontsize=35, ranksep=2, nodesep=2];',
             '    node [fontsize=35];',
@@ -366,6 +436,35 @@ class LaunchFile:
                 packageName, packageTuple)
 
             dotLines.extend(subgraphLines)
+
+        #### Add one node per rosparam file needed for all launch files
+        dotLines.extend([
+            '',
+            '    // Add nodes for all included rosparam files',
+        ])
+
+        # Iterate over all packages contained in the launch tree
+        for _, packageTuple in packageMap.iteritems():
+            launchFiles, _nodes = packageTuple
+
+            # Iterate over all launch files in this package
+            for launchFile in launchFiles:
+                # Iterate over all rosparam files needed by the launch file
+                for rosParam in launchFile.__rosParamFiles:
+                    name = basename(rosParam.filename)
+
+                    # Clean the name for use as a node name
+                    cleanName = name.replace(".", "_")
+
+                    # Get the attributes for this node
+                    attributeStr = self.__getAttributeStr([
+                        'label="%s"' % name,
+                    ])
+
+                    # Create a node for this rosparam file
+                    dotLines.extend([
+                        '    "yaml_%s" [%s];' % (cleanName, attributeStr),
+                    ])
 
         #### Create connections between all launch files
         dotLines.extend([
@@ -397,12 +496,41 @@ class LaunchFile:
                     # Select a color depending on if this is a standard
                     # connection between launch files, or a cycle to a
                     # previously parsed launch file
-                    color = "red" if isCycle else "black"
+                    color = self.CycleLineColor if isCycle else self.LineColor
 
-                    attributeStr = self.__getAttributeStr([
+                    attributes = []  # List of style attributes for the edge
+
+                    # Grab the set of arg substitutions used to conditionally
+                    # include the launch file so that the edge can be labeled
+                    # and styled accordingly
+                    argSubs = include.__includeArgs
+                    if len(argSubs) > 0:
+                        # Change the color of the line to indicate that it
+                        # required arg substitutions
+                        color = self.ConditionalLineColor
+
+                        # Convert all arg name value pairs into a single
+                        # string, e.g., given {"one": "two", "three": "four"}
+                        # the resulting string should be:
+                        #    "one:=two\nthree:=four"
+                        # So that each arg pair is on its own line
+                        # for improved readability
+                        argSubsStr = '\n'.join(map(
+                            lambda t: ":=".join(map(str, t)), argSubs.items()))
+
+                        attributes.extend([
+                            # Label the edge with the arguments needed
+                            # to include that file
+                            'label="%s"' % argSubsStr,
+                        ])
+
+                    # Add attributes for the edge
+                    attributes.extend([
                         'penwidth=3',
-                        'color=%s' % color,
-                    ])
+                        'color="%s"' % color,
+                        ])
+
+                    attributeStr = self.__getAttributeStr(attributes)
 
                     # Add a comment indicating that this is a cycle edge
                     if isCycle:
@@ -436,6 +564,69 @@ class LaunchFile:
                     '    "launch_%s" -> "node_%s" [%s];' % \
                         (cleanLaunchFile, node.name, attributeStr),
                 ])
+
+        #### Create connections between launch files and rosparam files
+        dotLines.extend([
+            '',
+            '    // Add connections between launch files and rosparam files',
+        ])
+
+        # Iterate over all packages contained in the launch tree
+        for _, packageTuple in packageMap.iteritems():
+            launchFiles, _nodes = packageTuple
+
+            # Iterate over all launch files in this package
+            for launchFile in launchFiles:
+                cleanLaunchFile = launchFile.getCleanName()
+
+                # Iterate over all rosparam files needed by the launch file
+                for rosParam in launchFile.__rosParamFiles:
+                    name = basename(rosParam.filename)
+
+                    # Clean the name for use as a node name
+                    cleanName = name.replace(".", "_")
+
+                    # Default attributes
+                    attributes = []
+                    color = self.LineColor
+
+                    # Grab the set of arg substitutions used to conditionally
+                    # include the launch file so that the edge can be labeled
+                    # and styled accordingly
+                    argSubs = rosParam.argSubs
+                    if len(argSubs) > 0:
+                        # Change the color of the line to indicate that it
+                        # required arg substitutions
+                        color = self.ConditionalLineColor
+
+                        # Convert all arg name value pairs into a single
+                        # string, e.g., given {"one": "two", "three": "four"}
+                        # the resulting string should be:
+                        #    "one:=two\nthree:=four"
+                        # So that each arg pair is on its own line
+                        # for improved readability
+                        argSubsStr = '\n'.join(map(
+                            lambda t: ":=".join(map(str, t)), argSubs.items()))
+
+                        # Label the edge with the arguments needed to
+                        # resolve the file
+                        attributes.extend([
+                            'label="%s"' % argSubsStr,
+                            ])
+
+                    # Create the attributes for this edge
+                    attributes.extend([
+                        'color="%s"' % color,
+                    ])
+
+                    # Convert the attributes into a string
+                    attributeStr = self.__getAttributeStr(attributes)
+
+                    # Create a node for this rosparam file
+                    dotLines.extend([
+                        '    "launch_%s" -> "yaml_%s" [%s];' % \
+                                    (cleanLaunchFile, cleanName, attributeStr),
+                    ])
 
         dotLines.extend([
             '}',  # end of digraph
@@ -516,10 +707,21 @@ class LaunchFile:
                     'fillcolor="%s"' % color
                 ])
 
+                # Create the label for the node
+                if self.__inputArgs.showNodeType:
+                    #### Include the node type in addition to its name
+
+                    # Use a newline as a separator to keep the node boxes from
+                    # becoming very wide
+                    label = "%s\\ntype: %s" % (name, node.nodeType)
+                else:
+                    #### Just use the node name
+                    label = name
+
                 ## Add a node for each node
                 dotLines.extend([
                     '        "node_%s" [label="%s" %s];' % \
-                        (name, name, attributeStr),
+                        (name, label, attributeStr),
                 ])
         else:
             dotLines.extend([
@@ -541,8 +743,12 @@ class LaunchFile:
         * filename -- the launch file
 
         '''
-        tree = ET.parse(filename)
-        root = tree.getroot()
+        try:
+            tree = ET.parse(filename)
+            root = tree.getroot()
+        except Exception, e:
+            raise Exception(
+                "Error while parsing launch file: %s: %s" % (filename, e))
 
         # Parse all of the launch elements. The XML is parsed serially, meaning
         # that if an argument is used before it is defined then it will
@@ -562,10 +768,10 @@ class LaunchFile:
             # Handle all types of tags
             if child.tag == self.ArgTag:
                 # Parse the argument
-                self.__parseArg(child)
+                self.__parseArgTag(child)
             elif child.tag == self.IncludeTag:
                 try:
-                    launchFile = self.__parseInclude(child)
+                    launchFile = self.__parseIncludeTag(child)
                 except:
                     traceback.print_exc()
                     continue  # Ignore error
@@ -574,13 +780,13 @@ class LaunchFile:
                         self.__includes.append(launchFile)
             elif child.tag == self.GroupTag:
                 try:
-                    self.__parseGroup(child)
+                    self.__parseGroupTag(child)
                 except:
                     traceback.print_exc()
                     continue  # Ignore error
             elif child.tag == self.NodeTag:
                 try:
-                    node = self.__parseNode(child)
+                    node = self.__parseNodeTag(child)
                 except:
                     traceback.print_exc()
                     continue  # Ignore error
@@ -588,9 +794,15 @@ class LaunchFile:
                     # Node is disabled (i.e., if=false, or unless=true)
                     if node is not None:
                         self.__nodes.append(node)
+            elif child.tag == self.RosParamTag:
+                try:
+                    self.__parseRosParam(child)
+                except:
+                    traceback.print_exc()
+                    continue  # Ignore error
             elif child.tag == self.TestTag:
                 try:
-                    testNode = self.__parseTestNode(child)
+                    testNode = self.__parseTestNodeTag(child)
                 except:
                     traceback.print_exc()
                     continue  # Ignore error
@@ -599,33 +811,18 @@ class LaunchFile:
                     if testNode is not None:
                         self.__nodes.append(testNode)
 
-    def __parseArg(self, arg):
+    def __parseArgTag(self, arg):
         '''Parse the argument tag from a launch file.
 
         * arg -- the argument tag
 
         '''
-        name = self.__getAttribute(arg, self.NameAttribute)
-
-        # Grab the default and standard value
-        default = arg.attrib.get(self.DefaultAttribute, None)
-        value = arg.attrib.get(self.ValueAttribute, default)
-
-        # If value is None that means neither attribute was defined
-        if value is None:
-            raise Exception(
-                "Argument must define either the %s or the %s attribute" %
-                (self.DefaultAttribute, self.ValueAttribute))
-
-        # Any of these attributes may have substitution arguments
-        # that need to be resolved
-        name = self.__resolveText(name)
-        value = self.__resolveText(value)
+        name, value = self.__parseArg(arg)
 
         # Store the argument
         self.__args[name] = value
 
-    def __parseInclude(self, include):
+    def __parseIncludeTag(self, include):
         '''Parse the include tag from a launch file.
 
         * include -- the include tag
@@ -646,6 +843,15 @@ class LaunchFile:
         # Resolve the full path to the include file
         resolved = self.__resolveText(filename)
 
+        # If the filename contained any arg substitutions then we want to
+        # label the edge indicating the arg and value that was used to
+        # conditionally select this launch file
+        argSubs = {}  # The file does not use any arg substitutions
+        if resolved != filename:
+            # Get the dictionary of arg substitutions that this
+            # filename contains
+            argSubs = self.__getSubstitutionArgs(filename)
+
         # Protect against cycles in the launch file graph
         hasVisited = (resolved in VISITED_LAUNCH_FILES)
         if hasVisited:
@@ -653,10 +859,32 @@ class LaunchFile:
                 "graph from: '%s' to '%s'" % (self.__filename, resolved)
             self.__cycles.append(resolved)  # Add the filename
 
-        # Create the new launch file and parse it
-        return LaunchFile(resolved)
+        # Iterate over all children of the include tag to determine if we
+        # are expected to pass any args to the included launch file.
+        inheritedArgs = {}
+        for child in include:
+            if child.tag == self.ArgTag:
+                #### Found an arg that should be inherited
 
-    def __parseNode(self, node):
+                # Grab (and resolve) the name and value of the arg
+                name, value = self.__parseArg(child)
+
+                # Allow the child launch file to inherit this argument
+                inheritedArgs[name] = value
+
+        # Check for rosparams specified under the include tag
+        self.__findRosParams(include)
+
+        # Create the new launch file and parse it -- pass the argument
+        # overrides to the child launch file to override the argument anywhere
+        # it is defined
+        return LaunchFile(
+            self.__inputArgs,
+            resolved,
+            includeArgs=argSubs,
+            overrideArgs=inheritedArgs)
+
+    def __parseNodeTag(self, node):
         '''Parse the node tag from a launch file.
 
         * node -- the node tag
@@ -677,9 +905,56 @@ class LaunchFile:
         nodeType = self.__resolveText(nodeType)
         name = self.__resolveText(name)
 
+        # Check for rosparams specified under the node tag
+        self.__findRosParams(node)
+
         return Node(self, pkg, nodeType, name, False)  # Not a test node
 
-    def __parseTestNode(self, testNode):
+    def __findRosParams(self, element):
+        '''Find any and all rosparam elements specified under the given
+        element.
+
+        * element -- the XML element that may contain rosparam elements
+
+        '''
+        # Iterate over children looking for rosparams
+        for child in element:
+            if child.tag == self.RosParamTag:
+                try:
+                    self.__parseRosParam(child)
+                except:
+                    traceback.print_exc()
+                    print "WARNING: parsing rosparam"
+                    continue  # Ignore error
+
+    def __parseRosParam(self, rosparam):
+        '''Parse the rosparam tag from a launch file.
+
+        * rosparam -- the rosparam tag
+
+        '''
+        # Load is the default command if it is not provided
+        command = rosparam.attrib.get(self.CommandAttribute, self.LoadCommand)
+
+        # The file attribute is only valid for load and dump commands
+        if command in [self.LoadCommand, self.DumpCommand]:
+            paramFile = rosparam.attrib.get(self.FileAttribute, None)
+            if paramFile is not None:
+                # Resolve the path to the included file
+                resolved = self.__resolveText(paramFile)
+
+                # If the filename contained any arg substitutions then we
+                # want to label the edge indicating the arg and value that
+                # was used to conditionally select this rosparam file
+                argSubs = {}  # The file does not use any arg substitutions
+                if resolved != paramFile:
+                    # Get the dictionary of arg substitutions that
+                    # this filename contains
+                    argSubs = self.__getSubstitutionArgs(paramFile)
+
+                self.__rosParamFiles.append(RosParam(resolved, argSubs))
+
+    def __parseTestNodeTag(self, testNode):
         '''Parse the test tag from a launch file.
 
         * testNode -- the testNode tag
@@ -702,7 +977,7 @@ class LaunchFile:
 
         return Node(self, pkg, nodeType, name, True)  # This is a test node
 
-    def __parseGroup(self, group):
+    def __parseGroupTag(self, group):
         '''Parse the group tag from a launch file.
 
         * group -- the group tag
@@ -713,6 +988,34 @@ class LaunchFile:
             return None  # Node is disabled
 
         self.__parseLaunchElements(group)
+
+    def __parseArg(self, arg):
+        '''Parse the given arg element to get (and resolve) its name
+        and value.
+
+        * arg -- the arg element
+
+        '''
+        name = self.__getAttribute(arg, self.NameAttribute)
+
+        # Grab the default and standard value
+        default = arg.attrib.get(self.DefaultAttribute, None)
+        value = arg.attrib.get(self.ValueAttribute, default)
+
+        # If value is None that means neither attribute was defined
+        if value is None:
+            raise Exception(
+                "Argument must define either the %s or the %s attribute" %
+                (self.DefaultAttribute, self.ValueAttribute))
+
+        # Any of these attributes may have substitution arguments
+        # that need to be resolved
+        name = self.__resolveText(name)
+        value = self.__resolveText(value)
+
+        return name, value
+
+    ##### ROS launch substitution argument related functions
 
     def __resolveText(self, text):
         '''Resolve all of the ROS launch substitution argument
@@ -741,7 +1044,7 @@ class LaunchFile:
         #    $(find package)/launch/$(arg camera).launch
         pattern = re.compile("\$\(([a-zA-Z_]+) ([a-zA-Z0-9_]+)\)")
 
-        # Continue until all substitution arguments in the filename
+        # Continue until all substitution arguments in the text
         # have been resolved
         results = pattern.search(text)
         while results is not None:
@@ -761,12 +1064,10 @@ class LaunchFile:
             # resolved substitution argument
             text = text.replace(fullText, resolved)
 
-            # Check for another command
+            # Check for another substitution
             results = pattern.search(text)
 
         return text
-
-    ##### ROS launch command handler functions
 
     def __onAnonSubstitutionArg(self, name):
         '''Handle the ROS launch 'anon' substitution argument which aims to
@@ -785,6 +1086,12 @@ class LaunchFile:
         * package -- the package to find
 
         '''
+        # If the argument is specified in the dictionary of argument
+        # overrides, then use the override value
+        if arg in self.__overrideArgs:
+            return self.__overrideArgs[arg]
+
+        # No override found, use the normal argument
         if arg not in self.__args:
             raise Exception("Could not resolve unknown arg: '%s'" % arg)
         return self.__args[arg]
@@ -826,6 +1133,42 @@ class LaunchFile:
             raise Exception(output)
 
         return output
+
+    def __getSubstitutionArgs(self, text):
+        '''Return a dictionary mapping arg names to values for all
+        arg substitutions defined in the given text.
+
+        * text -- the given text
+
+        '''
+        # Regular expression to find an arg substitution within text:
+        #    $(find package)/launch/$(arg camera).launch
+        pattern = re.compile("\$\(arg ([a-zA-Z0-9_]+)\)")
+
+        # Name value pair for all arg substitutions in the text
+        argSubs = {}
+
+        # Continue until all substitution arguments in the text
+        # have been found
+        results = pattern.search(text)
+        while results is not None:
+            fullText = results.group()
+            name = results.groups()[0]  # Only a single group
+
+            # Look up the value of the argument (this will raise an
+            # Exception if the arg cannot be found)
+            value = self.__onArgSubstitutionArg(name)
+
+            # Store the argument for the return value
+            argSubs[name] = value
+
+            # Remove substitution argument and continue looking for others
+            text = text.replace(fullText, "")
+
+            # Check for another substitution
+            results = pattern.search(text)
+
+        return argSubs
 
     ##### Private helper functions
 
@@ -899,8 +1242,20 @@ if __name__ == '__main__':
         'outputFile',
         help='the output dot file to save')
     parser.add_argument(
-        "--png", dest="convertToPng", action="store_true", default=False,
+        "--png", dest="convertToPng",
+        action="store_true", default=False,
         help="automatically convert the dot file to a PNG")
+    parser.add_argument(
+        "--show-node-type", dest="showNodeType",
+        action="store_true", default=False,
+        help="label ROS nodes with their type in addition to their name")
+    parser.add_argument(
+        "--show-rosparam-nodes", dest="showRosParamNodes",
+        action="store_true", default=False,
+        help="display nodes and connections for all rosparam files used")
+    parser.add_argument(
+        'overrideArguments', metavar='arg', type=str, nargs='*',
+        help='override an arg specified anywhere in the launch file tree')
 
     # Parse the command line options
     args = parser.parse_args()
@@ -909,25 +1264,40 @@ if __name__ == '__main__':
     launchFile = args.launchFile
     dotFilename = args.outputFile
 
+    # Convert the override arguments into a dictionary
+    # mapping the argument name to its value
+    overrideArgs = {}
+    for index, argStr in enumerate(args.overrideArguments):
+        # Each argument should be specified using roslaunch style
+        #     i.e., NAME:=VALUE
+        parts = argStr.split(":=")
+        if len(parts) == 2:
+            name, value = parts
+            overrideArgs[name] = value
+        else:
+            print "ERROR: invalid syntax for arg %s: %s" % (index, argStr)
+            print "       Args must be specified as NAME:=VALUE"
+            exit(1)
+
     ##### Validate the input arguments
 
     # Make sure the launch file exists
     if not exists(launchFile):
         print "ERROR: Can not find launch file: %s" % launchFile
-        exit(1)
+        exit(2)
 
     # Make sure the file is actually a launch file
     if not launchFile.lower().endswith(".launch"):
         print "ERROR: Must be given a '.launch' file: %s" % launchFile
-        exit(2)
+        exit(3)
 
     ##### Parse the launch file as XML
     try:
-        launchFile = LaunchFile(launchFile)
+        launchFile = LaunchFile(args, launchFile, overrideArgs=overrideArgs)
     except:
         traceback.print_exc()
         print "ERROR: failed to parse launch file: %s" % launchFile
-        exit(3)
+        exit(4)
 
     ##### Convert the launch file tree to a dot file
     try:
@@ -935,7 +1305,7 @@ if __name__ == '__main__':
     except:
         traceback.print_exc()
         print "ERROR: failed to generate dot file contents..."
-        exit(4)
+        exit(5)
     else:
         ##### Save the dot file
         fd = open(dotFilename, "w")
