@@ -1050,7 +1050,7 @@ class LaunchFile:
         # resolved, e.g.,:
         #    $(find package)/launch/file.launch
         #    $(find package)/launch/$(arg camera).launch
-        pattern = re.compile("\$\(([a-zA-Z_]+) ([a-zA-Z0-9_]+)\)")
+        pattern = re.compile("\$\(([a-zA-Z_]+) ([a-zA-Z0-9_! ]+)\)")
 
         # Continue until all substitution arguments in the text
         # have been resolved
@@ -1123,7 +1123,7 @@ class LaunchFile:
         else:
             #### A default value was supplied
             env, default = parts
-            return environ.get(env, defaultValue)
+            return environ.get(env, default)
 
     def __onFindSubstitutionArg(self, package):
         '''Handle the ROS launch 'find' substitution argument which aims to
