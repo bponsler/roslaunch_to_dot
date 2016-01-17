@@ -37,7 +37,7 @@ from os import system, environ
 from argparse import ArgumentParser
 from collections import namedtuple
 import xml.etree.ElementTree as ET
-from os.path import exists, basename, splitext, sep
+from os.path import abspath, exists, basename, splitext, sep
 
 
 # Keep track of a global set of launch files that have already been
@@ -1269,7 +1269,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Grab command line arguments
-    launchFile = args.launchFile
+    launchFile = abspath(args.launchFile)
     dotFilename = args.outputFile
 
     # Convert the override arguments into a dictionary
