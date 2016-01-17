@@ -67,6 +67,8 @@ Node = namedtuple("Node", [
 # Create a named tuple to store attributes pertaining to a rosparam file
 RosParam = namedtuple("RosParamFile", [
     "filename",   # The resolved filename for the rosparam file
+    "name",   # The base name for the rosparam file
+    "dotNodeName",  # The name for the corresponding dot node
     "package",  # The package that contains the rosparam file
     "argSubs",  # The dictionary of argument substitutions needed for the file
     ])
@@ -320,7 +322,6 @@ class LaunchFile:
 
         ########################################
         # Add all launch files to their respective packages
-        packageLaunchFileMap = {}
         for launchFile in allLaunchFiles:
             packageName = launchFile.getPackageName()
             items = packageMap.get(packageName, PackageItems([], [], []))
@@ -329,7 +330,6 @@ class LaunchFile:
 
         ########################################
         # Add all nodes to their respective packages
-        packageNodeMap = {}
         for node in self.getAllNodes():
             items = packageMap.get(node.package, PackageItems([], [], []))
             items.nodes.append(node)
@@ -337,11 +337,10 @@ class LaunchFile:
 
         ########################################
         # Add all rosparam files to their respective packages
-        packageRosParamMap = {}
-        for rosparam in self.getAllRosParamFiles():
-            items = packageMap.get(rosparam.package, PackageItems([], [], []))
-            items.rosParamFiles.append(rosparam)
-            packageMap[rosparam.package] = items
+        for rosParam in self.getAllRosParamFiles():
+            items = packageMap.get(rosParam.package, PackageItems([], [], []))
+            items.rosParamFiles.append(rosParam)
+            packageMap[rosParam.package] = items
 
         return packageMap
 
@@ -370,32 +369,6 @@ class LaunchFile:
         for packageName, packageItems in packageMap.iteritems():
             self.__createPackageSubgraph(
                 graph, packageName, packageItems, allNodeNames)
-
-        #### Add one node per rosparam file needed for all launch files
-        if self.__inputArgs.showRosParamNodes:
-            # Iterate over all packages contained in the launch tree
-            for packageName, packageItems in packageMap.iteritems():
-                # Iterate over all launch files in this package
-                for launchFile in packageItems.launchFiles:
-                    # Iterate over all rosparam files needed by the launch file
-                    for rosParam in launchFile.__rosParamFiles:
-                        name = basename(rosParam.filename)
-
-                        # Add the package name when groups are disabled
-                        label = name
-                        if self.__inputArgs.disableGroups:
-                            label = label + "\npkg: " + rosParam.package
-
-                        # Clean the name for use as a node name
-                        cleanName = name.replace(".", "_")
-
-                        # Create a unique name for the rosparam file that
-                        # includes the package name to make it unique
-                        yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
-
-                        graph.add_node(
-                            yamlNodeName,
-                            label=label)
 
         #### Create connections between all launch files
 
@@ -465,22 +438,13 @@ class LaunchFile:
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
             # Iterate over all packages contained in the launch tree
-            for packageName, packageItems in packageMap.iteritems():
+            for _, packageItems in packageMap.iteritems():
                 # Iterate over all launch files in this package
                 for launchFile in packageItems.launchFiles:
                     launchNodeName = launchFile.getDotNodeName()
 
                     # Iterate over all rosparam files needed by the launch file
                     for rosParam in launchFile.__rosParamFiles:
-                        name = basename(rosParam.filename)
-
-                        # Clean the name for use as a node name
-                        cleanName = name.replace(".", "_")
-
-                        # Create a unique name for the rosparam file that
-                        # includes the package name to make it unique
-                        yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
-
                         # Default attributes
                         color = self.LineColor
                         label = ""
@@ -506,7 +470,7 @@ class LaunchFile:
 
                         graph.add_edge(
                             launchNodeName,
-                            yamlNodeName,
+                            rosParam.dotNodeName,
                             label=label,
                             penwidth="3",
                             color=color)
@@ -528,72 +492,86 @@ class LaunchFile:
         '''
         subgraphNodes = []
 
-        ## Add one node per launch file contained within this package
-        if len(packageItems.launchFiles) > 0:
-            for launchFile in packageItems.launchFiles:
-                baseFilename = basename(launchFile.getFilename())
-                launchNodeName = launchFile.getDotNodeName()
+        #### Add one node per launch file contained within this package
+        for launchFile in packageItems.launchFiles:
+            baseFilename = basename(launchFile.getFilename())
+            launchNodeName = launchFile.getDotNodeName()
 
-                # Select the color based on whether or not the file is missing
-                color = self.MissingFileColor if launchFile.isMissing() else \
-                        self.LaunchFileColor
+            # Select the color based on whether or not the file is missing
+            color = self.MissingFileColor if launchFile.isMissing() else \
+                    self.LaunchFileColor
 
-                label = baseFilename
+            label = baseFilename
+            if self.__inputArgs.disableGroups:
+                #### Include the package name if groups are disabled
+                label = label + "\npkg: " + packageName
+
+            # Add a node for each launch file
+            graph.add_node(
+                launchNodeName,
+                label=label,
+                shape="rectangle",
+                style="filled",
+                fillcolor=color)
+
+            # Support disabling subgraph grouping
+            if not self.__inputArgs.disableGroups:
+                subgraphNodes.append(launchNodeName)
+
+        #### Add one node per node contained within this package
+        for node in packageItems.nodes:
+            # Change the color to indicate that this is a test node
+            color = self.TestNodeColor if node.isTestNode else \
+                    self.NodeColor
+
+            # ROS nodes must have unique names, thus alert the user if
+            # there are two nodes that have the same name
+            if node.name in allNodeNames:
+                print "WARNING: There are two nodes in the launch tree " \
+                    "that have the same name: %s" % node.name
+
+                # Modify the style of the node if it is a duplicate
+                color = self.DuplicateNodeColor
+
+            allNodeNames.add(node.name)
+
+            label = node.name
+            if self.__inputArgs.disableGroups:
+                #### Include the package name if groups are disabled
+                label = label + "\npkg: " + packageName
+
+            # Create the label for the node
+            if self.__inputArgs.showNodeType:
+                #### Include the node type in addition to its name
+                label = label + "\ntype: " + node.nodeType
+
+            ## Add a node for each node
+            graph.add_node(
+                node.dotNodeName,
+                label=label,
+                shape="rectangle",
+                style="filled",
+                fillcolor=color)
+
+            # Support disabling subgraph grouping
+            if not self.__inputArgs.disableGroups:
+                subgraphNodes.append(node.dotNodeName)
+
+        #### Add one node per rosparam file contained in this package
+        if self.__inputArgs.showRosParamNodes:
+            for rosParam in packageItems.rosParamFiles:
+                # Add the package name when groups are disabled
+                label = rosParam.name
                 if self.__inputArgs.disableGroups:
-                    #### Include the package name if groups are disabled
-                    label = label + "\npkg: " + packageName
+                    label = label + "\npkg: " + rosParam.package
 
-                # Add a node for each launch file
                 graph.add_node(
-                    launchNodeName,
-                    label=label,
-                    shape="rectangle",
-                    style="filled",
-                    fillcolor=color)
+                    rosParam.dotNodeName,
+                    label=label)
 
                 # Support disabling subgraph grouping
                 if not self.__inputArgs.disableGroups:
-                    subgraphNodes.append(launchNodeName)
-
-        ## Add one node per node contained within this package
-        if len(packageItems.nodes) > 0:
-            for node in packageItems.nodes:
-                # Change the color to indicate that this is a test node
-                color = self.TestNodeColor if node.isTestNode else \
-                        self.NodeColor
-
-                # ROS nodes must have unique names, thus alert the user if
-                # there are two nodes that have the same name
-                if node.name in allNodeNames:
-                    print "WARNING: There are two nodes in the launch tree " \
-                        "that have the same name: %s" % node.name
-
-                    # Modify the style of the node if it is a duplicate
-                    color = self.DuplicateNodeColor
-
-                allNodeNames.add(node.name)
-
-                label = node.name
-                if self.__inputArgs.disableGroups:
-                    #### Include the package name if groups are disabled
-                    label = label + "\npkg: " + packageName
-
-                # Create the label for the node
-                if self.__inputArgs.showNodeType:
-                    #### Include the node type in addition to its name
-                    label = label + "\ntype: " + node.nodeType
-
-                ## Add a node for each node
-                graph.add_node(
-                    node.dotNodeName,
-                    label=label,
-                    shape="rectangle",
-                    style="filled",
-                    fillcolor=color)
-
-                # Support disabling subgraph grouping
-                if not self.__inputArgs.disableGroups:
-                    subgraphNodes.append(node.dotNodeName)
+                    subgraphNodes.append(rosParam.dotNodeName)
 
         # Support disabling subgraph grouping
         if not self.__inputArgs.disableGroups:
@@ -604,6 +582,7 @@ class LaunchFile:
                 penwidth=5)
 
     ##### Launch file XML parsing functions
+    #
 
     def __parseLaunchFile(self, filename):
         '''Parse a single launch file.
@@ -831,7 +810,12 @@ class LaunchFile:
                 # Determine what ROS package contains the rosparam file
                 package = rospkg.get_package_name(paramFile)
 
-                param = RosParam(resolved, package, argSubs)
+                # Create a unique name for the dot node
+                name = basename(resolved)
+                cleanName = name.replace(".", "_")
+                dotNodeName = "yaml_%s_%s" % (package, cleanName)
+
+                param = RosParam(resolved, name, dotNodeName, package, argSubs)
                 self.__rosParamFiles.append(param)
 
     def __parseTestNodeTag(self, testNode):
