@@ -28,18 +28,8 @@ based on the input launch file.
                             files used
 
 '''
-
 import re
 import traceback
-import roslib
-import rospkg
-
-try:
-    import pygraphviz as gv
-except ImportError:
-    raise ImportError("Please run 'sudo apt-get install python-pygraphviz'")
-
-
 from sys import argv
 from random import randint
 from datetime import datetime
@@ -48,6 +38,15 @@ from argparse import ArgumentParser
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 from os.path import abspath, exists, basename, splitext, sep
+
+import roslib
+import rospkg
+
+try:
+    import pygraphviz as gv
+except ImportError:
+    raise ImportError("Please run 'sudo apt-get install python-pygraphviz'")
+
 
 # Keep track of a global set of launch files that have already been
 # visited so that we can protect ourselves from entering into an
@@ -65,12 +64,18 @@ Node = namedtuple("Node", [
     "dotNodeName",  # The name for the corresponding dot node
     "isTestNode"])  # True if this is a test node, False otherwise
 
-
 # Create a named tuple to store attributes pertaining to a rosparam file
 RosParam = namedtuple("RosParamFile", [
     "filename",   # The resolved filename for the rosparam file
     "package",  # The package that contains the rosparam file
     "argSubs",  # The dictionary of argument substitutions needed for the file
+    ])
+
+# Create a named tuple to store items contained in a single ROS package
+PackageItems = namedtuple("PackageItems", [
+    "launchFiles",  # The list of launch files contained in this package
+    "nodes",  # The list of nodes contains in this package
+    "rosParamFiles",  # The list of rosparam files contained in this package
     ])
 
 
@@ -282,44 +287,6 @@ class LaunchFile:
 
         return rosParamFiles
 
-    def getNumNodes(self):
-        '''Get the number of unique ROS nodes that this launch tree contains.
-
-        '''
-        allNodes = self.getAllNodes()
-
-        uniqueNodes = set()
-        for node in allNodes:
-            uniqueNodes.add((node.package, node.nodeType, node.name))
-
-        return len(uniqueNodes)
-
-    def getNumLaunchFiles(self):
-        '''Get the number of unique launch files that this launch
-        graph contains.
-
-        '''
-        allLaunchFiles = self.getAllLaunchFiles()
-
-        uniqueLaunchFiles = set()
-        for launchFile in allLaunchFiles:
-            uniqueLaunchFiles.add(launchFile.getFilename())
-
-        return len(uniqueLaunchFiles)
-
-    def getNumRosParamFiles(self):
-        '''Get the number of unique rosparam files that this launch
-        graph contains.
-
-        '''
-        allRosParamFiles = self.getAllRosParamFiles()
-
-        uniqueFiles = set()
-        for rosParam in allRosParamFiles:
-            uniqueFiles.add(rosParam.filename)
-
-        return len(uniqueFiles)
-
     def getIncludeMap(self):
         '''Return the dictionary mapping launch filenames to the list
         of launch files that they include.
@@ -349,12 +316,18 @@ class LaunchFile:
         # Grab the list of all launch files
         allLaunchFiles = self.getAllLaunchFiles()
 
+        packageMap = {}
+
         ########################################
         # Create map as follows:
         #     [package name]: [list of launch files from that package]
         packageLaunchFileMap = {}
         for launchFile in allLaunchFiles:
             packageName = launchFile.getPackageName()
+
+            # items = packageMap.get(package, PackageItem([], [], []))
+            # items.launchFiles.append(launchFile)
+            # packageMap[package] = items
 
             # Grab the list of launch files used from this package
             # (or create an empty one)
@@ -374,23 +347,39 @@ class LaunchFile:
             packageNodeMap[node.package] = packageNodes
 
         ########################################
-        # Join the two dictionaries together into one map as follows:
-        #     [package name]: (list of launch files, list of nodes)
-        packageMap = {}
-        uniquePackages = \
-            set(packageLaunchFileMap.keys() + packageNodeMap.keys())
+        # Create map as follows:
+        #     [package name]: [list of rosparam files from that package]
+        packageRosParamMap = {}
+        for rosparam in self.getAllRosParamFiles():
+            # Grab the list of rosparam files used from this package
+            # (or create an empty one)
+            rosParamFiles = packageRosParamMap.get(node.package, [])
+            rosParamFiles.append(rosparam)
+            packageRosParamMap[node.package] = rosParamFiles
 
-        # Combine all of the packages
+        ########################################
+        # Get the set of unique packages found in the launch tree
+        uniquePackages = set(
+            packageLaunchFileMap.keys() +
+            packageNodeMap.keys() +
+            packageRosParamMap.keys())
+
+        # Combine all of the packages into a map from package to PackageItems
+        packageMap = {}
         for package in uniquePackages:
             # Grab the launch files and nodes associated with this package
             # (if none, then use an empty list)
             packageLaunchFiles = packageLaunchFileMap.get(package, [])
             packageNodes = packageNodeMap.get(package, [])
+            rosParamFiles = packageRosParamMap.get(package, [])
 
             # Create a map from package name to tuple where the first item
             # is the list of launch files in this package, and the second
             # item is the list of nodes in this package
-            packageMap[package] = (packageLaunchFiles, packageNodes)
+            packageMap[package] = PackageItems(
+                packageLaunchFiles,
+                packageNodes,
+                rosParamFiles)
 
         return packageMap
 
@@ -416,18 +405,16 @@ class LaunchFile:
         #### Create a subgraph for every known package
         self.__clusterNum = 0
         allNodeNames = set()  # Set of node names to check for duplicates
-        for packageName, packageTuple in packageMap.iteritems():
+        for packageName, packageItems in packageMap.iteritems():
             self.__createPackageSubgraph(
-                graph, packageName, packageTuple, allNodeNames)
+                graph, packageName, packageItems, allNodeNames)
 
         #### Add one node per rosparam file needed for all launch files
         if self.__inputArgs.showRosParamNodes:
             # Iterate over all packages contained in the launch tree
-            for packageName, packageTuple in packageMap.iteritems():
-                launchFiles, _nodes = packageTuple
-
+            for packageName, packageItems in packageMap.iteritems():
                 # Iterate over all launch files in this package
-                for launchFile in launchFiles:
+                for launchFile in packageItems.launchFiles:
                     # Iterate over all rosparam files needed by the launch file
                     for rosParam in launchFile.__rosParamFiles:
                         name = basename(rosParam.filename)
@@ -451,11 +438,9 @@ class LaunchFile:
         #### Create connections between all launch files
 
         # Iterate over all packages contained in the launch tree
-        for _, packageTuple in packageMap.iteritems():
-            launchFiles, _nodes = packageTuple
-
+        for _, packageItems in packageMap.iteritems():
             # Iterate over all launch files in this package
-            for launchFile in launchFiles:
+            for launchFile in packageItems.launchFiles:
                 parentNodeName = launchFile.getDotNodeName()
 
                 # Grab the list of cycles for this launch file
@@ -504,10 +489,9 @@ class LaunchFile:
                         color=color)
 
         #### Create connections between launch files and nodes
-        for _, packageTuple in packageMap.iteritems():
-            _launchFiles, nodes = packageTuple
-
-            for node in nodes:
+        for _, packageItems in packageMap.iteritems():
+            # Iterate over the nodes in this package
+            for node in packageItems.nodes:
                 # Grab the dot node name of the launch file for this node
                 launchNodeName = node.launchFile.getDotNodeName()
 
@@ -518,13 +502,10 @@ class LaunchFile:
 
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
-
             # Iterate over all packages contained in the launch tree
-            for packageName, packageTuple in packageMap.iteritems():
-                launchFiles, _nodes = packageTuple
-
+            for packageName, packageItems in packageMap.iteritems():
                 # Iterate over all launch files in this package
-                for launchFile in launchFiles:
+                for launchFile in packageItems.launchFiles:
                     launchNodeName = launchFile.getDotNodeName()
 
                     # Iterate over all rosparam files needed by the launch file
@@ -573,25 +554,21 @@ class LaunchFile:
     def __createPackageSubgraph(self,
                                 graph,
                                 packageName,
-                                packageTuple,
+                                packageItems,
                                 allNodeNames):
         '''Create a subgraph for a single ROS package.
 
         * packageName -- the name of the ROS package
-        * packageTuple -- Tuple (list of launch files, list of nodes)
+        * packageItems -- The PackageItems object
         * allNodeNames -- the set of node names that have already been found so
                           that duplicate nodes can be highlighted
 
         '''
-
-        # Grab items from the package tuple
-        launchFiles, nodes = packageTuple
-
         subgraphNodes = []
 
         ## Add one node per launch file contained within this package
-        if len(launchFiles) > 0:
-            for launchFile in launchFiles:
+        if len(packageItems.launchFiles) > 0:
+            for launchFile in packageItems.launchFiles:
                 baseFilename = basename(launchFile.getFilename())
                 launchNodeName = launchFile.getDotNodeName()
 
@@ -617,8 +594,8 @@ class LaunchFile:
                     subgraphNodes.append(launchNodeName)
 
         ## Add one node per node contained within this package
-        if len(nodes) > 0:
-            for node in nodes:
+        if len(packageItems.nodes) > 0:
+            for node in packageItems.nodes:
                 # Change the color to indicate that this is a test node
                 color = self.TestNodeColor if node.isTestNode else \
                         self.NodeColor
