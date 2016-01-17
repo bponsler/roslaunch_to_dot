@@ -227,7 +227,8 @@ class LaunchFile:
         '''Get the name of the package that contains this launch file.'''
         packageName = rospkg.get_package_name(self.__filename)
         if not packageName:
-            raise Exception("Failed to get package name for: %s" % self.__filename)
+            raise Exception("Failed to get package name for: %s" %
+                            self.__filename)
 
         return packageName
 
@@ -399,14 +400,22 @@ class LaunchFile:
         # used by this launch tree
         packageMap = self.getPackageMap()
 
-        graph = gv.AGraph(name=self.getCleanName(), strict=False, directed=True, fontsize=35, ranksep=2, nodesep=2, compound=True)
+        graph = gv.AGraph(
+            name=self.getCleanName(),
+            strict=False,
+            directed=True,
+            fontsize=35,
+            ranksep=2,
+            nodesep=2,
+            compound=True)
         graph.node_attr.update(fontsize="35")
 
         #### Create a subgraph for every known package
         self.__clusterNum = 0
         allNodeNames = set()  # Set of node names to check for duplicates
         for packageName, packageTuple in packageMap.iteritems():
-            self.__createPackageSubgraph(graph, packageName, packageTuple, allNodeNames)
+            self.__createPackageSubgraph(
+                graph, packageName, packageTuple, allNodeNames)
 
         #### Add one node per rosparam file needed for all launch files
         if self.__inputArgs.showRosParamNodes:
@@ -477,8 +486,12 @@ class LaunchFile:
                         label = '\n'.join(map(
                             lambda t: ":=".join(map(str, t)), argSubs.items()))
 
-                    graph.add_edge(parentNodeName, includeNodeName,
-                                   label=label, penwidth="3", color=color)
+                    graph.add_edge(
+                        parentNodeName,
+                        includeNodeName,
+                        label=label,
+                        penwidth="3",
+                        color=color)
 
         #### Create connections between launch files and nodes
         for _, packageTuple in packageMap.iteritems():
@@ -488,8 +501,10 @@ class LaunchFile:
                 # Grab the dot node name of the launch file for this node
                 launchNodeName = node.launchFile.getDotNodeName()
 
-                graph.add_edge(launchNodeName, node.dotNodeName,
-                               penwidth=3)
+                graph.add_edge(
+                    launchNodeName,
+                    node.dotNodeName,
+                    penwidth=3)
 
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
@@ -536,12 +551,20 @@ class LaunchFile:
                                 lambda t: ":=".join(map(str, t)),
                                 argSubs.items()))
 
-                        graph.add_edge(launchNodeName, yamlNodeName,
-                                       label=label, penwidth="3", color=color)
+                        graph.add_edge(
+                            launchNodeName,
+                            yamlNodeName,
+                            label=label,
+                            penwidth="3",
+                            color=color)
 
         return graph
 
-    def __createPackageSubgraph(self, graph, packageName, packageTuple, allNodeNames):
+    def __createPackageSubgraph(self,
+                                graph,
+                                packageName,
+                                packageTuple,
+                                allNodeNames):
         '''Create a subgraph for a single ROS package.
 
         * packageName -- the name of the ROS package
@@ -567,8 +590,12 @@ class LaunchFile:
                         self.LaunchFileColor
 
                 # Add a node for each launch file
-                graph.add_node(launchNodeName,
-                      label=baseFilename, shape="rectangle", style="filled", fillcolor=color)
+                graph.add_node(
+                    launchNodeName,
+                    label=baseFilename,
+                    shape="rectangle",
+                    style="filled",
+                    fillcolor=color)
                 subgraphNodes.append(launchNodeName)
 
         ## Add one node per node contained within this package
@@ -601,11 +628,19 @@ class LaunchFile:
                     label = node.name
 
                 ## Add a node for each node
-                graph.add_node(node.dotNodeName,
-                    label=label, shape="rectangle", style="filled", fillcolor=color)
+                graph.add_node(
+                    node.dotNodeName,
+                    label=label,
+                    shape="rectangle",
+                    style="filled",
+                    fillcolor=color)
                 subgraphNodes.append(node.dotNodeName)
 
-        return graph.add_subgraph(nbunch=subgraphNodes, name="cluster_" + packageName, label=packageName, penwidth=5)
+        return graph.add_subgraph(
+            nbunch=subgraphNodes,
+            name="cluster_" + packageName,
+            label=packageName,
+            penwidth=5)
 
     ##### Launch file XML parsing functions
 
