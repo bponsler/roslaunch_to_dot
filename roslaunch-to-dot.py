@@ -4,7 +4,7 @@ file based on the tree of nodes and launch files that will be launched
 based on the input launch file.
 
     $ ./roslaunch-to-dot.py --help
-    usage: roslaunch-to-dot.py [-h] [--png] [--show-node-type]
+    usage: roslaunch-to-dot.py [-h] [--png] [--disable-groups] [--show-node-type]
                                [--show-rosparam-nodes]
                                launchFile outputFile [arg [arg ...]]
 
@@ -19,6 +19,7 @@ based on the input launch file.
     optional arguments:
       -h, --help            show this help message and exit
       --png                 automatically convert the dot file to a PNG
+      --disable-groups      don't group nodes/launch files based on their package
       --show-node-type      label ROS nodes with their type in addition to
                             thier name
       --show-rosparam-nodes
@@ -671,14 +672,15 @@ class LaunchFile:
         # Grab items from the package tuple
         launchFiles, nodes = packageTuple
 
-        dotLines.extend([
-            '',
-            '    // Subgraph for package: %s' % packageName,
-            '    subgraph cluster_%s {' % self.__clusterNum,
-            '        label="%s";' % packageName,
-            '        penwidth=5;  // Thicker borders on clusters',
-        ])
-        self.__clusterNum += 1  # Added a new subgraph
+        if not self.__inputArgs.disableGroups:
+            dotLines.extend([
+                '',
+                '    // Subgraph for package: %s' % packageName,
+                '    subgraph cluster_%s {' % self.__clusterNum,
+                '        label="%s";' % packageName,
+                '        penwidth=5;  // Thicker borders on clusters',
+            ])
+            self.__clusterNum += 1  # Added a new subgraph
 
         ## Add one node per launch file contained within this package
         if len(launchFiles) > 0:
@@ -694,9 +696,14 @@ class LaunchFile:
                 color = self.MissingFileColor if launchFile.isMissing() else \
                         self.LaunchFileColor
 
+                label = baseFilename;
+                if self.__inputArgs.disableGroups:
+                    #### Include the package name if groups are disabled
+                    label = label + "\npkg " + packageName
+
                 # List of attributes to apply to this node
                 attributeStr = self.__getAttributeStr([
-                    'label="%s"' % baseFilename,
+                    'label="%s"' % label,
                     'shape=rectangle',
                     'style=filled',
                     'fillcolor="%s"' % color,
@@ -742,15 +749,13 @@ class LaunchFile:
                 ])
 
                 # Create the label for the node
+                label = node.name;
+                if self.__inputArgs.disableGroups:
+                    #### Include the package name if groups are disabled
+                    label = label + "\npkg " + packageName
                 if self.__inputArgs.showNodeType:
                     #### Include the node type in addition to its name
-
-                    # Use a newline as a separator to keep the node boxes from
-                    # becoming very wide
-                    label = "%s\\ntype: %s" % (node.name, node.nodeType)
-                else:
-                    #### Just use the node name
-                    label = node.name
+                    label = label + "\ntype " + node.nodeType
 
                 ## Add a node for each node
                 dotLines.extend([
@@ -763,9 +768,10 @@ class LaunchFile:
                 '        // This package contains no ROS nodes',
                 ])
 
-        dotLines.extend([
-            "    }",  # End of package subgraph
-        ])
+        if not self.__inputArgs.disableGroups:
+            dotLines.extend([
+                "    }",  # End of package subgraph
+            ])
 
         return dotLines
 
@@ -1282,6 +1288,10 @@ if __name__ == '__main__':
         "--png", dest="convertToPng",
         action="store_true", default=False,
         help="automatically convert the dot file to a PNG")
+    parser.add_argument(
+        "--disable-groups", dest="disableGroups",
+        action="store_true", default=False,
+        help="don't group nodes/launch files based on their package")
     parser.add_argument(
         "--show-node-type", dest="showNodeType",
         action="store_true", default=False,
