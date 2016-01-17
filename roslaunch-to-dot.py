@@ -26,9 +26,12 @@ based on the input launch file.
                             files used
 
 '''
+
 import re
 import traceback
 import roslib
+import rospkg
+
 from sys import argv
 from random import randint
 from datetime import datetime
@@ -37,7 +40,6 @@ from argparse import ArgumentParser
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 from os.path import abspath, exists, basename, splitext, sep
-
 
 # Keep track of a global set of launch files that have already been
 # visited so that we can protect ourselves from entering into an
@@ -217,20 +219,11 @@ class LaunchFile:
 
     def getPackageName(self):
         '''Get the name of the package that contains this launch file.'''
-        # Isolate the launch directory which should exist in every
-        # launch file path
-        dirItems = self.__filename.split("%slaunch%s" % (sep, sep))
+        packageName = rospkg.get_package_name(self.__filename)
+        if not packageName:
+            raise Exception("Failed to get package name for: %s" % self.__filename)
 
-        # Should have at least 2 items:
-        #     path to package, relative path to package launch file
-        if len(dirItems) >= 2:
-            packageDir = dirItems[0]
-
-            # The final folder in the package directory should be the
-            # name of the associated package
-            return basename(packageDir)
-
-        raise Exception("Failed to get package name for: %s" % self.__filename)
+        return packageName
 
     def getAllLaunchFiles(self):
         '''Get the entire list of launch files included because of
