@@ -596,7 +596,10 @@ class LaunchFile:
                     shape="rectangle",
                     style="filled",
                     fillcolor=color)
-                subgraphNodes.append(launchNodeName)
+
+                # Support disabling subgraph grouping
+                if not self.__inputArgs.disableGroups:
+                    subgraphNodes.append(launchNodeName)
 
         ## Add one node per node contained within this package
         if len(nodes) > 0:
@@ -634,13 +637,18 @@ class LaunchFile:
                     shape="rectangle",
                     style="filled",
                     fillcolor=color)
-                subgraphNodes.append(node.dotNodeName)
 
-        return graph.add_subgraph(
-            nbunch=subgraphNodes,
-            name="cluster_" + packageName,
-            label=packageName,
-            penwidth=5)
+                # Support disabling subgraph grouping
+                if not self.__inputArgs.disableGroups:
+                    subgraphNodes.append(node.dotNodeName)
+
+        # Support disabling subgraph grouping
+        if not self.__inputArgs.disableGroups:
+            graph.add_subgraph(
+                nbunch=subgraphNodes,
+                name="cluster_" + packageName,
+                label=packageName,
+                penwidth=5)
 
     ##### Launch file XML parsing functions
 
@@ -1146,6 +1154,10 @@ if __name__ == '__main__':
         "--png", dest="convertToPng",
         action="store_true", default=False,
         help="automatically convert the dot file to a PNG")
+    parser.add_argument(
+        "--disable-groups", dest="disableGroups",
+        action="store_true", default=False,
+        help="don't group nodes/launch files based on their package")
     parser.add_argument(
         "--show-node-type", dest="showNodeType",
         action="store_true", default=False,
