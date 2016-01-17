@@ -53,6 +53,7 @@ Node = namedtuple("Node", [
     "package",  # The name of the ROS package containing this node
     "nodeType",  # The type of ROS node this is
     "name",  # The name of the ROS node
+    "dotNodeName",  # The name for the corresponding dot node
     "isTestNode"])  # True if this is a test node, False otherwise
 
 
@@ -112,6 +113,7 @@ class LaunchFile:
     # Colors used within the dot graph
     ConditionalLineColor = "#ff8c00"
     CycleLineColor = "red"
+    DuplicateNodeColor = "red"
     LaunchFileColor = "#d3d3d3"
     LineColor = "black"
     MissingFileColor = "#cc0000"
@@ -207,6 +209,13 @@ class LaunchFile:
         '''Get the clean (no periods) name for this launch file.'''
         return splitext(basename(self.__filename))[0].replace(".", "_")
 
+    def getDotNodeName(self):
+        '''Get the name of the dot node corresponding to this launch file.'''
+        cleanName = self.getCleanName()
+        packageName = self.getPackageName()
+
+        return "launch_%s_%s" % (packageName, cleanName)
+
     def getPackageName(self):
         '''Get the name of the package that contains this launch file.'''
         # Isolate the launch directory which should exist in every
@@ -243,8 +252,6 @@ class LaunchFile:
 
         '''
         allNodes = []
-
-        cleanName = self.getCleanName()
 
         # Add our own nodes
         for node in self.__nodes:
@@ -436,9 +443,10 @@ class LaunchFile:
 
         #### Create a subgraph for every known package
         self.__clusterNum = 0
+        allNodeNames = set()  # Set of node names to check for duplicates
         for packageName, packageTuple in packageMap.iteritems():
             subgraphLines = self.__createPackageSubgraph(
-                packageName, packageTuple)
+                packageName, packageTuple, allNodeNames)
 
             dotLines.extend(subgraphLines)
 
@@ -450,7 +458,7 @@ class LaunchFile:
             ])
 
             # Iterate over all packages contained in the launch tree
-            for _, packageTuple in packageMap.iteritems():
+            for packageName, packageTuple in packageMap.iteritems():
                 launchFiles, _nodes = packageTuple
 
                 # Iterate over all launch files in this package
@@ -462,6 +470,10 @@ class LaunchFile:
                         # Clean the name for use as a node name
                         cleanName = name.replace(".", "_")
 
+                        # Create a unique name for the rosparam file that
+                        # includes the package name to make it unique
+                        yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
+
                         # Get the attributes for this node
                         attributeStr = self.__getAttributeStr([
                             'label="%s"' % name,
@@ -469,7 +481,7 @@ class LaunchFile:
 
                         # Create a node for this rosparam file
                         dotLines.extend([
-                            '    "yaml_%s" [%s];' % (cleanName, attributeStr),
+                            '    "%s" [%s];' % (yamlNodeName, attributeStr),
                         ])
 
         #### Create connections between all launch files
@@ -484,7 +496,7 @@ class LaunchFile:
 
             # Iterate over all launch files in this package
             for launchFile in launchFiles:
-                cleanParentName = launchFile.getCleanName()
+                parentNodeName = launchFile.getDotNodeName()
 
                 # Grab the list of cycles for this launch file
                 cycles = launchFile.getCycles()
@@ -493,7 +505,7 @@ class LaunchFile:
                 # current launch file
                 for include in launchFile.__includes:
                     includeFilename = include.getFilename()
-                    cleanIncludeName = include.getCleanName()
+                    includeNodeName = include.getDotNodeName()
 
                     # Determine if this include is a cycle to a previously
                     # visited node
@@ -544,8 +556,8 @@ class LaunchFile:
                                         "to a previous launch file")
 
                     dotLines.extend([
-                        '    "launch_%s" -> "launch_%s" [%s];' % \
-                            (cleanParentName, cleanIncludeName, attributeStr),
+                        '    "%s" -> "%s" [%s];' % \
+                            (parentNodeName, includeNodeName, attributeStr),
                     ])
 
         #### Create connections between launch files and nodes
@@ -558,8 +570,8 @@ class LaunchFile:
             _launchFiles, nodes = packageTuple
 
             for node in nodes:
-                # Grab the cleaned name of the launch file for this node
-                cleanLaunchFile = node.launchFile.getCleanName()
+                # Grab the dot node name of the launch file for this node
+                launchNodeName = node.launchFile.getDotNodeName()
 
                 # Set of attributes to apply to this edge
                 attributeStr = self.__getAttributeStr([
@@ -567,8 +579,8 @@ class LaunchFile:
                 ])
 
                 dotLines.extend([
-                    '    "launch_%s" -> "node_%s" [%s];' % \
-                        (cleanLaunchFile, node.name, attributeStr),
+                    '    "%s" -> "%s" [%s];' % \
+                        (launchNodeName, node.dotNodeName, attributeStr),
                 ])
 
         #### Create connections between launch files and rosparam files
@@ -579,12 +591,12 @@ class LaunchFile:
             ])
 
             # Iterate over all packages contained in the launch tree
-            for _, packageTuple in packageMap.iteritems():
+            for packageName, packageTuple in packageMap.iteritems():
                 launchFiles, _nodes = packageTuple
 
                 # Iterate over all launch files in this package
                 for launchFile in launchFiles:
-                    cleanLaunchFile = launchFile.getCleanName()
+                    launchNodeName = launchFile.getDotNodeName()
 
                     # Iterate over all rosparam files needed by the launch file
                     for rosParam in launchFile.__rosParamFiles:
@@ -592,6 +604,10 @@ class LaunchFile:
 
                         # Clean the name for use as a node name
                         cleanName = name.replace(".", "_")
+
+                        # Create a unique name for the rosparam file that
+                        # includes the package name to make it unique
+                        yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
 
                         # Default attributes
                         attributes = []
@@ -632,8 +648,8 @@ class LaunchFile:
 
                         # Create a node for this rosparam file
                         dotLines.extend([
-                            '    "launch_%s" -> "yaml_%s" [%s];' % \
-                                    (cleanLaunchFile, cleanName, attributeStr),
+                            '    "%s" -> "%s" [%s];' % \
+                                (launchNodeName, yamlNodeName, attributeStr),
                         ])
 
         dotLines.extend([
@@ -642,11 +658,13 @@ class LaunchFile:
 
         return '\n'.join(dotLines)
 
-    def __createPackageSubgraph(self, packageName, packageTuple):
+    def __createPackageSubgraph(self, packageName, packageTuple, allNodeNames):
         '''Create a subgraph for a single ROS package.
 
         * packageName -- the name of the ROS package
         * packageTuple -- Tuple (list of launch files, list of nodes)
+        * allNodeNames -- the set of node names that have already been found so
+                          that duplicate nodes can be highlighted
 
         '''
         dotLines = []
@@ -671,7 +689,7 @@ class LaunchFile:
             ])
             for launchFile in launchFiles:
                 baseFilename = basename(launchFile.getFilename())
-                cleanName = launchFile.getCleanName()
+                launchNodeName = launchFile.getDotNodeName()
 
                 # Select the color based on whether or not the file is missing
                 color = self.MissingFileColor if launchFile.isMissing() else \
@@ -687,7 +705,7 @@ class LaunchFile:
 
                 # Add a node for each launch file
                 dotLines.extend([
-                    '        "launch_%s" [%s];' % (cleanName, attributeStr),
+                    '        "%s" [%s];' % (launchNodeName, attributeStr),
                 ])
         else:
             dotLines.extend([
@@ -701,12 +719,21 @@ class LaunchFile:
                 '',
                 '        // ROS nodes contained in this package',
             ])
-            for node in nodes:
-                name = node.name
 
+            for node in nodes:
                 # Change the color to indicate that this is a test node
                 color = self.TestNodeColor if node.isTestNode else \
                         self.NodeColor
+
+                # ROS nodes must have unique names, thus alert the user if
+                # there are two nodes that have the same name
+                if node.name in allNodeNames:
+                    print "WARNING: There are two nodes in the launch tree " \
+                        "that have the same name: %s" % node.name
+
+                    # Modify the style of the node if it is a duplicate
+                    color = self.DuplicateNodeColor
+                allNodeNames.add(node.name)
 
                 # List of attributes to apply to this node
                 attributeStr = self.__getAttributeStr([
@@ -721,15 +748,15 @@ class LaunchFile:
 
                     # Use a newline as a separator to keep the node boxes from
                     # becoming very wide
-                    label = "%s\\ntype: %s" % (name, node.nodeType)
+                    label = "%s\\ntype: %s" % (node.name, node.nodeType)
                 else:
                     #### Just use the node name
-                    label = name
+                    label = node.name
 
                 ## Add a node for each node
                 dotLines.extend([
-                    '        "node_%s" [label="%s" %s];' % \
-                        (name, label, attributeStr),
+                    '        "%s" [label="%s" %s];' % \
+                        (node.dotNodeName, label, attributeStr),
                 ])
         else:
             dotLines.extend([
@@ -916,7 +943,13 @@ class LaunchFile:
         # Check for rosparams specified under the node tag
         self.__findRosParams(node)
 
-        return Node(self, pkg, nodeType, name, False)  # Not a test node
+        # Name for the dot node that will represent this ROS node
+        # use the package, node type, and node name for the dot node name
+        # to make it fully unique
+        dotNodeName = "node_%s_%s_%s" % (pkg, nodeType, name)
+
+        # False means this is not a test node
+        return Node(self, pkg, nodeType, name, dotNodeName, False)
 
     def __findRosParams(self, element):
         '''Find any and all rosparam elements specified under the given
@@ -983,7 +1016,13 @@ class LaunchFile:
         nodeType = self.__resolveText(nodeType)
         name = self.__resolveText(name)
 
-        return Node(self, pkg, nodeType, name, True)  # This is a test node
+        # Name for the dot node that will represent this ROS node
+        # use the package, node type, and node name for the dot node name
+        # to make it fully unique
+        dotNodeName = "node_%s_%s_%s" % (pkg, nodeType, name)
+
+        # True means this is a test node
+        return Node(self, pkg, nodeType, name, dotNodeName, True)
 
     def __parseGroupTag(self, group):
         '''Parse the group tag from a launch file.
