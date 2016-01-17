@@ -1346,8 +1346,8 @@ if __name__ == '__main__':
         if args.convertToPng:
             print "Converting dot file into PNG..."
 
-            # Use the same name as the dot file for the png
-            pngFilename = dotFilename.replace(".dot", ".png")
+            # Use the same base name as the dot file for the png
+            pngFilename = splitext(dotFilename)[0] + ".png"
 
             # Simple command to convert the dot graph into a PNG
             pngCommand = "dot -Tpng %s -o %s" % (dotFilename, pngFilename)
