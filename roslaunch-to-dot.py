@@ -1316,8 +1316,10 @@ if __name__ == '__main__':
         print "ERROR: Can not find launch file: %s" % launchFile
         exit(2)
 
-    # Make sure the file is actually a launch file
-    if not launchFile.lower().endswith(".launch"):
+    # Make sure the file is actually a launch file (ending on .launch, .test or
+    # .xml)
+    launchFileBaseName, launchFileExtension = splitext(launchFile.lower())
+    if not launchFileExtension in [ ".launch", ".test", ".xml" ] :
         print "ERROR: Must be given a '.launch' file: %s" % launchFile
         exit(3)
 
