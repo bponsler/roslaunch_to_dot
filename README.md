@@ -113,24 +113,3 @@ Generates 'examples/first.dot' and 'examples/first.png' which looks like:
 ![alt text](https://github.com/bponsler/roslaunch_to_dot/raw/master/examples/first.png "Example dot graph")
 
 To see the dot code generated for the example take a look at [examples/first.dot](https://github.com/bponsler/roslaunch_to_dot/raw/master/examples/first.dot).
-
-## FAQ
-
-### Why is it failing to find the name of a package?
-
-Sometimes the script will output the following python Exception and error:
-
-    $ ./roslanch_to_dot.py example.launch /tmp/example.dot
-    Traceback (most recent call last):
-      File "roslaunch_to_dot/roslaunch-to-dot.py", line 1342, in <module>
-        dot = launchFile.toDot()
-      File "roslaunch_to_dot/roslaunch-to-dot.py", line 407, in toDot
-        packageMap = self.getPackageMap()
-      File "roslaunch_to_dot/roslaunch-to-dot.py", line 354, in getPackageMap
-        packageName = launchFile.getPackageName()
-      File "roslaunch_to_dot/roslaunch-to-dot.py", line 233, in getPackageName
-        raise Exception("Failed to get package name for: %s" % self.__filename)
-    Exception: Failed to get package name for: example.launch
-    ERROR: failed to generate dot file contents...
-
-This happens in the event that the script is unable to locate the name of the package that contains the launch file that was passed to the script (in this case 'example.launch'). When this happens it is usually due to the fact that the launch fle used is not stored within a folder named "launch". The script uses the absolute path to the main launch file to determine the package that contains the launch file, and **it makes the assumption that all launch files are stored under a directory named "launch"**. Therefore, this Exception will be raised whenever the script encounters a launch file that is not stored under a 'launch' directory.
