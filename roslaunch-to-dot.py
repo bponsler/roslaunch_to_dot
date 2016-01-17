@@ -319,67 +319,29 @@ class LaunchFile:
         packageMap = {}
 
         ########################################
-        # Create map as follows:
-        #     [package name]: [list of launch files from that package]
+        # Add all launch files to their respective packages
         packageLaunchFileMap = {}
         for launchFile in allLaunchFiles:
             packageName = launchFile.getPackageName()
-
-            # items = packageMap.get(package, PackageItem([], [], []))
-            # items.launchFiles.append(launchFile)
-            # packageMap[package] = items
-
-            # Grab the list of launch files used from this package
-            # (or create an empty one)
-            packageLaunchFiles = packageLaunchFileMap.get(packageName, [])
-            packageLaunchFiles.append(launchFile)
-            packageLaunchFileMap[packageName] = packageLaunchFiles
+            items = packageMap.get(packageName, PackageItems([], [], []))
+            items.launchFiles.append(launchFile)
+            packageMap[packageName] = items
 
         ########################################
-        # Create map as follows:
-        #     [package name]: [list of ROS nodes from that package]
+        # Add all nodes to their respective packages
         packageNodeMap = {}
         for node in self.getAllNodes():
-            # Grab the list of nodes used from this package
-            # (or create an empty one)
-            packageNodes = packageNodeMap.get(node.package, [])
-            packageNodes.append(node)
-            packageNodeMap[node.package] = packageNodes
+            items = packageMap.get(node.package, PackageItems([], [], []))
+            items.nodes.append(node)
+            packageMap[node.package] = items
 
         ########################################
-        # Create map as follows:
-        #     [package name]: [list of rosparam files from that package]
+        # Add all rosparam files to their respective packages
         packageRosParamMap = {}
         for rosparam in self.getAllRosParamFiles():
-            # Grab the list of rosparam files used from this package
-            # (or create an empty one)
-            rosParamFiles = packageRosParamMap.get(node.package, [])
-            rosParamFiles.append(rosparam)
-            packageRosParamMap[node.package] = rosParamFiles
-
-        ########################################
-        # Get the set of unique packages found in the launch tree
-        uniquePackages = set(
-            packageLaunchFileMap.keys() +
-            packageNodeMap.keys() +
-            packageRosParamMap.keys())
-
-        # Combine all of the packages into a map from package to PackageItems
-        packageMap = {}
-        for package in uniquePackages:
-            # Grab the launch files and nodes associated with this package
-            # (if none, then use an empty list)
-            packageLaunchFiles = packageLaunchFileMap.get(package, [])
-            packageNodes = packageNodeMap.get(package, [])
-            rosParamFiles = packageRosParamMap.get(package, [])
-
-            # Create a map from package name to tuple where the first item
-            # is the list of launch files in this package, and the second
-            # item is the list of nodes in this package
-            packageMap[package] = PackageItems(
-                packageLaunchFiles,
-                packageNodes,
-                rosParamFiles)
+            items = packageMap.get(rosparam.package, PackageItems([], [], []))
+            items.rosParamFiles.append(rosparam)
+            packageMap[rosparam.package] = items
 
         return packageMap
 
