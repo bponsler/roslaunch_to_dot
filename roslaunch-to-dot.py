@@ -853,8 +853,9 @@ class LaunchFile:
         '''
         name, value = self.__parseArg(arg)
 
-        # Store the argument
-        self.__args[name] = value
+        # Store the argument -- if it is defined
+        if value is not None:
+            self.__args[name] = value
 
     def __parseIncludeTag(self, include):
         '''Parse the include tag from a launch file.
@@ -904,7 +905,8 @@ class LaunchFile:
                 name, value = self.__parseArg(child)
 
                 # Allow the child launch file to inherit this argument
-                inheritedArgs[name] = value
+                if value is not None:
+                    inheritedArgs[name] = value
 
         # Check for rosparams specified under the include tag
         self.__findRosParams(include)
@@ -1048,16 +1050,13 @@ class LaunchFile:
         default = arg.attrib.get(self.DefaultAttribute, None)
         value = arg.attrib.get(self.ValueAttribute, default)
 
-        # If value is None that means neither attribute was defined
-        if value is None:
-            raise Exception(
-                "Argument must define either the %s or the %s attribute" %
-                (self.DefaultAttribute, self.ValueAttribute))
-
         # Any of these attributes may have substitution arguments
         # that need to be resolved
         name = self.__resolveText(name)
-        value = self.__resolveText(value)
+
+        # Only resolve the value if it is defined
+        if value is not None:
+            value = self.__resolveText(value)
 
         return name, value
 
