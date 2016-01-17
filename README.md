@@ -26,6 +26,8 @@ In the event that two nodes in the launch tree share the same name the second on
     WARNING: There are two nodes in the launch tree that have the same name: duplicate_name"
 ```
 
+The "--disable-groups" option is provided the graph will be generated without a subgraph for each package (i.e., the package boxes in the graph will not exist).
+
 If the script is launched with the **--show-node-type** option then each node in the graph representing a ROS node will be labeled using both its name and the ROS package it is contained in. For example, for the ros node "test_node" in the package "my_package" the node would be labeled as follows:
 
 ```
@@ -33,7 +35,7 @@ If the script is launched with the **--show-node-type** option then each node in
     type: my_package
 ```
 
-When the "--show-node-type" argument is not provided the node is labeled using only the name of the ROS node it represents.
+When the "--show-node-type" option is not provided the node is labeled using only the name of the ROS node it represents.
 
 Additionally, this script provides the ability for the user to override args specified in the provided launch file from the command line. The arguments are provided at the end of the call to the script and use roslaunch argument format. For example, to override the value of the "test_arg" and "index" args, the script could be called as follows:
 
@@ -62,6 +64,7 @@ Anywhere in the provided launch file (i.e., example.launch) that the "test_arg" 
     optional arguments:
       -h, --help            show this help message and exit
       --png                 automatically convert the dot file to a PNG
+      --disable-groups      don't group nodes/launch files based on their package
       --show-node-type      label ROS nodes with their type in addition to their
                             name
       --show-rosparam-nodes

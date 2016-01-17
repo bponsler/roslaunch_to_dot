@@ -19,6 +19,8 @@ based on the input launch file.
     optional arguments:
       -h, --help            show this help message and exit
       --png                 automatically convert the dot file to a PNG
+      --disable-groups      don't group nodes/launch files based on their
+                            package
       --show-node-type      label ROS nodes with their type in addition to
                             thier name
       --show-rosparam-nodes
@@ -67,6 +69,7 @@ Node = namedtuple("Node", [
 # Create a named tuple to store attributes pertaining to a rosparam file
 RosParam = namedtuple("RosParamFile", [
     "filename",   # The resolved filename for the rosparam file
+    "package",  # The package that contains the rosparam file
     "argSubs",  # The dictionary of argument substitutions needed for the file
     ])
 
@@ -429,6 +432,11 @@ class LaunchFile:
                     for rosParam in launchFile.__rosParamFiles:
                         name = basename(rosParam.filename)
 
+                        # Add the package name when groups are disabled
+                        label = name
+                        if self.__inputArgs.disableGroups:
+                            label = label + "\npkg: " + rosParam.package
+
                         # Clean the name for use as a node name
                         cleanName = name.replace(".", "_")
 
@@ -436,7 +444,9 @@ class LaunchFile:
                         # includes the package name to make it unique
                         yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
 
-                        graph.add_node(yamlNodeName, label=name)
+                        graph.add_node(
+                            yamlNodeName,
+                            label=label)
 
         #### Create connections between all launch files
 
@@ -589,10 +599,15 @@ class LaunchFile:
                 color = self.MissingFileColor if launchFile.isMissing() else \
                         self.LaunchFileColor
 
+                label = baseFilename
+                if self.__inputArgs.disableGroups:
+                    #### Include the package name if groups are disabled
+                    label = label + "\npkg: " + packageName
+
                 # Add a node for each launch file
                 graph.add_node(
                     launchNodeName,
-                    label=baseFilename,
+                    label=label,
                     shape="rectangle",
                     style="filled",
                     fillcolor=color)
@@ -619,16 +634,15 @@ class LaunchFile:
 
                 allNodeNames.add(node.name)
 
+                label = node.name
+                if self.__inputArgs.disableGroups:
+                    #### Include the package name if groups are disabled
+                    label = label + "\npkg: " + packageName
+
                 # Create the label for the node
                 if self.__inputArgs.showNodeType:
                     #### Include the node type in addition to its name
-
-                    # Use a newline as a separator to keep the node boxes from
-                    # becoming very wide
-                    label = "%s\\ntype: %s" % (node.name, node.nodeType)
-                else:
-                    #### Just use the node name
-                    label = node.name
+                    label = label + "\ntype: " + node.nodeType
 
                 ## Add a node for each node
                 graph.add_node(
@@ -875,7 +889,11 @@ class LaunchFile:
                     # this filename contains
                     argSubs = self.__getSubstitutionArgs(paramFile)
 
-                self.__rosParamFiles.append(RosParam(resolved, argSubs))
+                # Determine what ROS package contains the rosparam file
+                package = rospkg.get_package_name(paramFile)
+
+                param = RosParam(resolved, package, argSubs)
+                self.__rosParamFiles.append(param)
 
     def __parseTestNodeTag(self, testNode):
         '''Parse the test tag from a launch file.
