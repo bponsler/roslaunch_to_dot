@@ -28,11 +28,10 @@ based on the input launch file.
 '''
 import re
 import traceback
+import roslib
 from sys import argv
-from copy import deepcopy
 from random import randint
 from datetime import datetime
-from commands import getoutput
 from os import system, environ
 from argparse import ArgumentParser
 from collections import namedtuple
@@ -1171,15 +1170,7 @@ class LaunchFile:
         * package -- the ROS package to find
 
         '''
-        # Create the command to find the given ROS package
-        command = "rospack find %s" % package
-        output = getoutput(command)
-
-        # Check for a rospack error, and just propagate it
-        if "Error:" in output:
-            raise Exception(output)
-
-        return output
+        return roslib.packages.get_pkg_dir(package)
 
     def __getSubstitutionArgs(self, text):
         '''Return a dictionary mapping arg names to values for all
