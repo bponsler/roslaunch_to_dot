@@ -26,9 +26,18 @@ based on the input launch file.
                             files used
 
 '''
+
 import re
 import traceback
 import roslib
+import rospkg
+
+try:
+    import pygraphviz as gv
+except ImportError:
+    raise ImportError("Please run 'sudo apt-get install python-pygraphviz'")
+
+
 from sys import argv
 from random import randint
 from datetime import datetime
@@ -37,7 +46,6 @@ from argparse import ArgumentParser
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 from os.path import abspath, exists, basename, splitext, sep
-
 
 # Keep track of a global set of launch files that have already been
 # visited so that we can protect ourselves from entering into an
@@ -217,20 +225,11 @@ class LaunchFile:
 
     def getPackageName(self):
         '''Get the name of the package that contains this launch file.'''
-        # Isolate the launch directory which should exist in every
-        # launch file path
-        dirItems = self.__filename.split("%slaunch%s" % (sep, sep))
+        packageName = rospkg.get_package_name(self.__filename)
+        if not packageName:
+            raise Exception("Failed to get package name for: %s" % self.__filename)
 
-        # Should have at least 2 items:
-        #     path to package, relative path to package launch file
-        if len(dirItems) >= 2:
-            packageDir = dirItems[0]
-
-            # The final folder in the package directory should be the
-            # name of the associated package
-            return basename(packageDir)
-
-        raise Exception("Failed to get package name for: %s" % self.__filename)
+        return packageName
 
     def getAllLaunchFiles(self):
         '''Get the entire list of launch files included because of
@@ -394,68 +393,23 @@ class LaunchFile:
     #### Dot graph functions
 
     def toDot(self):
-        '''Return the dot file content that represents this launch
-        file tree.
-
-        '''
-        # Grab items for the generated notice
-        stamp = str(datetime.now())
-        command = ' '.join(argv)
+        '''Return the graph that represents this launch file tree.'''
 
         # Grab the map of all packages, nodes, and include files
         # used by this launch tree
         packageMap = self.getPackageMap()
 
-        # Grab properties of the graph just for fun
-        numPackages = len(packageMap)
-        numLaunchFiles = self.getNumLaunchFiles()
-        numNodes = self.getNumNodes()
-        numRosParamFiles = self.getNumRosParamFiles()
-
-        # If rosparam files are not being shown then there aren't any
-        # ndoes contained in the graph
-        if not self.__inputArgs.showRosParamNodes:
-            numRosParamFiles = 0
-
-        # Name the graph after the original launch file
-        cleanName = self.getCleanName()
-
-        dotLines = [
-            'digraph %s_launch_graph {' % cleanName,
-            # The generated notice has to go inside of the digraph otherwise
-            # Ubuntu doesn't recognize the file as a dot file...
-            '    /**',
-            '      * This dot file was automatically generated on %s' % stamp,
-            '      * By the command:',
-            '      *    %s' % command,
-            '      *',
-            '      * This launch graph has the following properties:',
-            '      *    - it contains %s ROS packages' % numPackages,
-            '      *    - it contains %s ROS launch files' % numLaunchFiles,
-            '      *    - it contains %s ROS nodes' % numNodes,
-            '      *    - it contains %s rosparam files' % numRosParamFiles,
-            '     */',
-            '    graph [fontsize=35, ranksep=2, nodesep=2];',
-            '    node [fontsize=35];',
-            '    compound=true;',  # Allow connections between subgraphs
-        ]
+        graph = gv.AGraph(name=self.getCleanName(), strict=False, directed=True, fontsize=35, ranksep=2, nodesep=2, compound=True)
+        graph.node_attr.update(fontsize="35")
 
         #### Create a subgraph for every known package
         self.__clusterNum = 0
         allNodeNames = set()  # Set of node names to check for duplicates
         for packageName, packageTuple in packageMap.iteritems():
-            subgraphLines = self.__createPackageSubgraph(
-                packageName, packageTuple, allNodeNames)
-
-            dotLines.extend(subgraphLines)
+            self.__createPackageSubgraph(graph, packageName, packageTuple, allNodeNames)
 
         #### Add one node per rosparam file needed for all launch files
         if self.__inputArgs.showRosParamNodes:
-            dotLines.extend([
-                '',
-                '    // Add nodes for all included rosparam files',
-            ])
-
             # Iterate over all packages contained in the launch tree
             for packageName, packageTuple in packageMap.iteritems():
                 launchFiles, _nodes = packageTuple
@@ -473,21 +427,9 @@ class LaunchFile:
                         # includes the package name to make it unique
                         yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
 
-                        # Get the attributes for this node
-                        attributeStr = self.__getAttributeStr([
-                            'label="%s"' % name,
-                        ])
-
-                        # Create a node for this rosparam file
-                        dotLines.extend([
-                            '    "%s" [%s];' % (yamlNodeName, attributeStr),
-                        ])
+                        graph.add_node(yamlNodeName, label=name)
 
         #### Create connections between all launch files
-        dotLines.extend([
-            '',
-            '    // Add connections between launch files',
-        ])
 
         # Iterate over all packages contained in the launch tree
         for _, packageTuple in packageMap.iteritems():
@@ -515,7 +457,7 @@ class LaunchFile:
                     # previously parsed launch file
                     color = self.CycleLineColor if isCycle else self.LineColor
 
-                    attributes = []  # List of style attributes for the edge
+                    label = ""
 
                     # Grab the set of arg substitutions used to conditionally
                     # include the launch file so that the edge can be labeled
@@ -532,39 +474,13 @@ class LaunchFile:
                         #    "one:=two\nthree:=four"
                         # So that each arg pair is on its own line
                         # for improved readability
-                        argSubsStr = '\n'.join(map(
+                        label = '\n'.join(map(
                             lambda t: ":=".join(map(str, t)), argSubs.items()))
 
-                        attributes.extend([
-                            # Label the edge with the arguments needed
-                            # to include that file
-                            'label="%s"' % argSubsStr,
-                        ])
-
-                    # Add attributes for the edge
-                    attributes.extend([
-                        'penwidth=3',
-                        'color="%s"' % color,
-                        ])
-
-                    attributeStr = self.__getAttributeStr(attributes)
-
-                    # Add a comment indicating that this is a cycle edge
-                    if isCycle:
-                        dotLines.append("    // WARNING: This edge is cycle "
-                                        "to a previous launch file")
-
-                    dotLines.extend([
-                        '    "%s" -> "%s" [%s];' % \
-                            (parentNodeName, includeNodeName, attributeStr),
-                    ])
+                    graph.add_edge(parentNodeName, includeNodeName,
+                                   label=label, penwidth="3", color=color)
 
         #### Create connections between launch files and nodes
-        dotLines.extend([
-            '',
-            '    // Add connections between launch files and nodes',
-        ])
-
         for _, packageTuple in packageMap.iteritems():
             _launchFiles, nodes = packageTuple
 
@@ -572,22 +488,11 @@ class LaunchFile:
                 # Grab the dot node name of the launch file for this node
                 launchNodeName = node.launchFile.getDotNodeName()
 
-                # Set of attributes to apply to this edge
-                attributeStr = self.__getAttributeStr([
-                    "penwidth=3",
-                ])
-
-                dotLines.extend([
-                    '    "%s" -> "%s" [%s];' % \
-                        (launchNodeName, node.dotNodeName, attributeStr),
-                ])
+                graph.add_edge(launchNodeName, node.dotNodeName,
+                               penwidth=3)
 
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
-            dotLines.extend([
-                '',
-                '    // Add connections between launch files and rosparam files',
-            ])
 
             # Iterate over all packages contained in the launch tree
             for packageName, packageTuple in packageMap.iteritems():
@@ -609,8 +514,8 @@ class LaunchFile:
                         yamlNodeName = "yaml_%s_%s" % (packageName, cleanName)
 
                         # Default attributes
-                        attributes = []
                         color = self.LineColor
+                        label = ""
 
                         # Grab the set of arg substitutions used to
                         # conditionally include the launch file so that the
@@ -627,37 +532,16 @@ class LaunchFile:
                             #    "one:=2\nthree:=4"
                             # So that each arg pair is on its own line
                             # for improved readability
-                            argSubsStr = '\n'.join(map(
+                            label = '\n'.join(map(
                                 lambda t: ":=".join(map(str, t)),
                                 argSubs.items()))
 
-                            # Label the edge with the arguments needed to
-                            # resolve the file
-                            attributes.extend([
-                                'label="%s"' % argSubsStr,
-                                ])
+                        graph.add_edge(launchNodeName, yamlNodeName,
+                                       label=label, penwidth="3", color=color)
 
-                        # Create the attributes for this edge
-                        attributes.extend([
-                            'color="%s"' % color,
-                        ])
+        return graph
 
-                        # Convert the attributes into a string
-                        attributeStr = self.__getAttributeStr(attributes)
-
-                        # Create a node for this rosparam file
-                        dotLines.extend([
-                            '    "%s" -> "%s" [%s];' % \
-                                (launchNodeName, yamlNodeName, attributeStr),
-                        ])
-
-        dotLines.extend([
-            '}',  # end of digraph
-        ])
-
-        return '\n'.join(dotLines)
-
-    def __createPackageSubgraph(self, packageName, packageTuple, allNodeNames):
+    def __createPackageSubgraph(self, graph, packageName, packageTuple, allNodeNames):
         '''Create a subgraph for a single ROS package.
 
         * packageName -- the name of the ROS package
@@ -666,26 +550,14 @@ class LaunchFile:
                           that duplicate nodes can be highlighted
 
         '''
-        dotLines = []
 
         # Grab items from the package tuple
         launchFiles, nodes = packageTuple
 
-        dotLines.extend([
-            '',
-            '    // Subgraph for package: %s' % packageName,
-            '    subgraph cluster_%s {' % self.__clusterNum,
-            '        label="%s";' % packageName,
-            '        penwidth=5;  // Thicker borders on clusters',
-        ])
-        self.__clusterNum += 1  # Added a new subgraph
+        subgraphNodes = []
 
         ## Add one node per launch file contained within this package
         if len(launchFiles) > 0:
-            dotLines.extend([
-                '',
-                '        // Launch files contained in this package',
-            ])
             for launchFile in launchFiles:
                 baseFilename = basename(launchFile.getFilename())
                 launchNodeName = launchFile.getDotNodeName()
@@ -694,31 +566,13 @@ class LaunchFile:
                 color = self.MissingFileColor if launchFile.isMissing() else \
                         self.LaunchFileColor
 
-                # List of attributes to apply to this node
-                attributeStr = self.__getAttributeStr([
-                    'label="%s"' % baseFilename,
-                    'shape=rectangle',
-                    'style=filled',
-                    'fillcolor="%s"' % color,
-                ])
-
                 # Add a node for each launch file
-                dotLines.extend([
-                    '        "%s" [%s];' % (launchNodeName, attributeStr),
-                ])
-        else:
-            dotLines.extend([
-                '',
-                '        // This package contains no launch files',
-                ])
+                graph.add_node(launchNodeName,
+                      label=baseFilename, shape="rectangle", style="filled", fillcolor=color)
+                subgraphNodes.append(launchNodeName)
 
         ## Add one node per node contained within this package
         if len(nodes) > 0:
-            dotLines.extend([
-                '',
-                '        // ROS nodes contained in this package',
-            ])
-
             for node in nodes:
                 # Change the color to indicate that this is a test node
                 color = self.TestNodeColor if node.isTestNode else \
@@ -732,14 +586,8 @@ class LaunchFile:
 
                     # Modify the style of the node if it is a duplicate
                     color = self.DuplicateNodeColor
-                allNodeNames.add(node.name)
 
-                # List of attributes to apply to this node
-                attributeStr = self.__getAttributeStr([
-                    'shape=rectangle',
-                    'style=filled',
-                    'fillcolor="%s"' % color
-                ])
+                allNodeNames.add(node.name)
 
                 # Create the label for the node
                 if self.__inputArgs.showNodeType:
@@ -753,21 +601,11 @@ class LaunchFile:
                     label = node.name
 
                 ## Add a node for each node
-                dotLines.extend([
-                    '        "%s" [label="%s" %s];' % \
-                        (node.dotNodeName, label, attributeStr),
-                ])
-        else:
-            dotLines.extend([
-                '',
-                '        // This package contains no ROS nodes',
-                ])
+                graph.add_node(node.dotNodeName,
+                    label=label, shape="rectangle", style="filled", fillcolor=color)
+                subgraphNodes.append(node.dotNodeName)
 
-        dotLines.extend([
-            "    }",  # End of package subgraph
-        ])
-
-        return dotLines
+        return graph.add_subgraph(nbunch=subgraphNodes, name="cluster_" + packageName, label=packageName, penwidth=5)
 
     ##### Launch file XML parsing functions
 
@@ -1243,15 +1081,6 @@ class LaunchFile:
 
         return True  # Element is enabled
 
-    def __getAttributeStr(self, attributes):
-        '''Create the dot code to set the given list of attributes on
-        a graph, or node.
-
-        * attributes -- the list of attributes to apply
-
-        '''
-        return ', '.join(attributes)
-
     def __getAttribute(self, element, attribute, default=None):
         '''Get an attribute from the given ROS launch XML element. If
         the value does not exist, and the default value given is None
@@ -1323,8 +1152,10 @@ if __name__ == '__main__':
         print "ERROR: Can not find launch file: %s" % launchFile
         exit(2)
 
-    # Make sure the file is actually a launch file
-    if not launchFile.lower().endswith(".launch"):
+    # Make sure the file is actually a launch file (ending on .launch, .test or
+    # .xml)
+    launchFileBaseName, launchFileExtension = splitext(launchFile.lower())
+    if not launchFileExtension in [ ".launch", ".test", ".xml" ] :
         print "ERROR: Must be given a '.launch' file: %s" % launchFile
         exit(3)
 
@@ -1338,31 +1169,22 @@ if __name__ == '__main__':
 
     ##### Convert the launch file tree to a dot file
     try:
-        dot = launchFile.toDot()
+        graph = launchFile.toDot()
     except:
         traceback.print_exc()
         print "ERROR: failed to generate dot file contents..."
         exit(5)
     else:
         ##### Save the dot file
-        fd = open(dotFilename, "w")
-        fd.write("%s\n" % dot)  # Add newline at end of file
-        fd.close()
+        graph.write(dotFilename)
 
         ##### Convert the dot file into a PNG
         if args.convertToPng:
             print "Converting dot file into PNG..."
 
-            # Use the same name as the dot file for the png
-            pngFilename = dotFilename.replace(".dot", ".png")
+            # Use the same base name as the dot file for the png
+            pngFilename = splitext(dotFilename)[0] + ".png"
 
-            # Simple command to convert the dot graph into a PNG
-            pngCommand = "dot -Tpng %s -o %s" % (dotFilename, pngFilename)
-
-            # Execute the command, and handle basic errors
-            if system(pngCommand) != 0:
-                 print "ERROR: Failed to convert the dot graph to a PNG!"
-                 print "Tried to use the following command to do it:"
-                 print pngCommand
-            else:
-                print "PNG saved to: %s" % pngFilename
+            # create png
+            graph.draw(pngFilename, prog="dot")
+            print "PNG saved to: %s" % pngFilename
