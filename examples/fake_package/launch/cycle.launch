@@ -1,0 +1,7 @@
+<launch>
+    <!-- Create a cycle in the launch graph-->
+    <include file="$(find fake_package)/launch/example.launch" />
+
+    <!-- Create a cycle to ourself -->
+    <include file="$(find fake_package)/launch/cycle.launch" />
+</launch>

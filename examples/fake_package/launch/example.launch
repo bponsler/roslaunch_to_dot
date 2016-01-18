@@ -1,0 +1,11 @@
+<launch>
+    <!-- Handle including the same file several times -->
+    <include file="$(find fake_package)/launch/triplet.launch" ns="one" />
+    <include file="$(find fake_package)/launch/triplet.launch" ns="two" />
+    <include file="$(find fake_package)/launch/triplet.launch" ns="three" />
+
+    <!-- Include a launch file that adds a cycle -->
+    <include file="$(find fake_package)/launch/cycle.launch" ns="three" />
+
+    <rosparam file="$(find fake_package)/parameters/configuration/robot.yaml" />
+</launch>

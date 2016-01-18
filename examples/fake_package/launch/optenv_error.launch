@@ -1,0 +1,6 @@
+<launch>
+    <arg name="default_value" default="$(optenv FIRST_ROBOT !!NO_ROBOT_SET!!)"/>
+    <arg name="no_default_value" default="$(optenv SECOND_ROBOT)"/>
+
+    <include file="$(find fake_package)/launch/$(arg no_default_value)" />
+</launch>

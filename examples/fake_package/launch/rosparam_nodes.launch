@@ -1,0 +1,6 @@
+<launch>
+    <arg name="robot" default="robot" />
+
+    <rosparam file="$(find fake_package)/parameters/defaults.yaml" />
+    <rosparam file="$(find fake_package)/parameters/configuration/$(arg robot).yaml" />
+</launch>

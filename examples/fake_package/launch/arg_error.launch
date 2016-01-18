@@ -1,0 +1,16 @@
+<launch>
+    <arg name="undefined_arg" />  <!-- totally undefined arg -->
+    <arg name="default_arg" default="my_value"/>  <!-- arg with default value -->
+    <arg name="value_arg" value="15"/>  <!-- arg with value -->
+
+    <!-- Should throw an error if not specified on command line -->
+    <include file="$(find fake_package)/launch/$(arg undefined_arg).launch" />
+
+    <!-- Should be able to override this from command line -->
+    <include file="$(find fake_package)/launch/$(arg default_arg).launch" />
+
+    <!-- Should not be able to override this from command line -->
+    <!-- roslauch would throw the following error when trying to override this arg: -->
+    <!--     cannot override arg 'value_arg', which has already been set. -->
+    <include file="$(find fake_package)/launch/$(arg value_arg).launch" />
+</launch>

@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="fake_package" type="fake" name="fake_node" />
+</launch>

@@ -1,0 +1,8 @@
+<launch>
+    <group ns="gopher">
+        <group ns="configuration">
+            <rosparam command="load" file="$(find fake_package)/parameters/defaults.yaml"/>
+            <rosparam command="load" file="$(find fake_package)/parameters/configuration/$(env ROBOT).yaml"/>
+        </group>
+    </group>
+</launch>

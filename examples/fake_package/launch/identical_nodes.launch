@@ -1,0 +1,5 @@
+<launch>
+    <!-- Contains two identical nodes -->
+    <node pkg="fake_package" type="test_node" name="a_node" />
+    <node pkg="fake_package" type="test_node" name="a_node" />
+</launch>

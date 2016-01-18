@@ -116,3 +116,14 @@ Generates 'examples/first.dot' and 'examples/first.png' which looks like:
 ![alt text](https://github.com/bponsler/roslaunch_to_dot/raw/master/examples/first.png "Example dot graph")
 
 To see the dot code generated for the example take a look at [examples/first.dot](https://github.com/bponsler/roslaunch_to_dot/raw/master/examples/first.dot).
+
+## Running the unit tests
+
+In order to run the unit tests execute the following commands:
+
+```
+    $ cd roslaunch_to_dot
+    $ ./run_tests.sh
+```
+
+All of the tests should pass without any errors. Make sure to setup the ROS environment in your shell prior to running these scripts, otherwise they will fail.

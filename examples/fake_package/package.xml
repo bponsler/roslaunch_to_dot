@@ -1,0 +1,13 @@
+<package>
+  <!-- Package Metadata -->
+  <name>fake_package</name>
+  <maintainer email=""></maintainer>
+  <description>
+    Fake package for generating example graphs.
+  </description>
+  <version>0.0.0</version>
+  <license>BSD</license>
+
+  <!-- Required by Catkin -->
+  <buildtool_depend>catkin</buildtool_depend>
+</package>

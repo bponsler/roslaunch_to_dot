@@ -1,0 +1,4 @@
+<launch>
+    <!-- Link to a rosparam file with a package that does not exist -->
+    <rosparam file="$(find this_package_does_not_exist)/params/robot.yaml" />
+</launch>

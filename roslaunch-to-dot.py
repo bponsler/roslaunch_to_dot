@@ -49,6 +49,10 @@ except ImportError:
     raise ImportError("Please run 'sudo apt-get install python-pygraphviz'")
 
 
+# List of filetypes that are recognized/supported as ROS launch files
+LAUNCH_FILE_TYPES = [".launch", ".test", ".xml"]
+
+
 # Keep track of a global set of launch files that have already been
 # visited so that we can protect ourselves from entering into an
 # infinite loop of launch files if there happens to be a recursive
@@ -578,9 +582,19 @@ class LaunchFile:
                 if self.__inputArgs.disableGroups:
                     label = label + "\npkg: " + rosParam.package
 
+                # Update the color of the node in the event that the
+                # file is not found
+                color = ''
+                style = ''
+                if not exists(rosParam.filename):
+                    style = "filled"
+                    color = self.MissingFileColor
+
                 graph.add_node(
                     rosParam.dotNodeName,
-                    label=label)
+                    label=label,
+                    style=style,
+                    color=color)
 
                 # Support disabling subgraph grouping
                 if not self.__inputArgs.disableGroups:
@@ -1169,11 +1183,13 @@ if __name__ == '__main__':
         print "ERROR: Can not find launch file: %s" % launchFile
         exit(2)
 
-    # Make sure the file is actually a launch file (ending on .launch, .test or
-    # .xml)
+    # Make sure the file is actually a launch file
+    # (ending in .launch, .test or .xml)
     launchFileBaseName, launchFileExtension = splitext(launchFile.lower())
-    if not launchFileExtension in [ ".launch", ".test", ".xml" ] :
-        print "ERROR: Must be given a '.launch' file: %s" % launchFile
+    if not launchFileExtension in LAUNCH_FILE_TYPES:
+        filetypes = ', '.join(LAUNCH_FILE_TYPES)
+        print "ERROR: Must be given a supported filetype: %s: %s" % \
+            (filetypes, launchFile)
         exit(3)
 
     ##### Parse the launch file as XML
