@@ -3,8 +3,8 @@
 file based on the tree of nodes and launch files that will be launched
 based on the input launch file.
 
-    $ ./roslaunch-to-dot.py --help
-    usage: roslaunch-to-dot.py [-h] [--png] [--show-node-type]
+    usage: roslaunch-to-dot.py [-h] [--landscape] [--aspect-ratio ASPECTRATIO]
+                               [--png] [--disable-groups] [--show-node-type]
                                [--show-rosparam-nodes]
                                launchFile outputFile [arg [arg ...]]
 
@@ -18,11 +18,16 @@ based on the input launch file.
 
     optional arguments:
       -h, --help            show this help message and exit
+      --landscape           display the nodes from left to right instead of top
+                            to bottom
+      --aspect-ratio ASPECTRATIO
+                            the approximate aspect ratio desired (default =
+                            8.5/11)
       --png                 automatically convert the dot file to a PNG
       --disable-groups      don't group nodes/launch files based on their
                             package
       --show-node-type      label ROS nodes with their type in addition to
-                            thier name
+                            their name
       --show-rosparam-nodes
                             display nodes and connections for all rosparam
                             files used
@@ -377,8 +382,18 @@ class LaunchFile:
             fontsize=35,
             ranksep=2,
             nodesep=2,
+            ratio=self.__inputArgs.aspectRatio,
             compound=True)
+
+        # Enable landscape mode, if specified
+        if self.__inputArgs.landscapeMode:
+            graph.graph_attr.update(rankdir="LR")
+
+        # Set node attributes
         graph.node_attr.update(fontsize="35")
+
+        # Set edge attributes
+        graph.edge_attr.update(fontsize="35")
 
         #### Create a subgraph for every known package
         self.__clusterNum = 0
@@ -1134,6 +1149,13 @@ if __name__ == '__main__':
     parser.add_argument(
         'outputFile',
         help='the output dot file to save')
+    parser.add_argument(
+        "--landscape", dest="landscapeMode",
+        action="store_true", default=False,
+        help="display the nodes from left to right instead of top to bottom")
+    parser.add_argument(
+        "--aspect-ratio", dest="aspectRatio", default=(8.5/11.0),
+        help="the approximate aspect ratio desired (default = 8.5/11)")
     parser.add_argument(
         "--png", dest="convertToPng",
         action="store_true", default=False,

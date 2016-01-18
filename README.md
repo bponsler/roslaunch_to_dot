@@ -45,11 +45,16 @@ Additionally, this script provides the ability for the user to override args spe
 
 Anywhere in the provided launch file (i.e., example.launch) that the "test_arg" or "index" arguments get used their values will be overriden with "some_value" and "5", respectively. If the launch file passes the arguments to another included launch file, then the overriden values will be passed down to the included launch file as well.
 
+Two command line options have been added to help adjust the layout of the resulting dot graph. Those options are:
+
+    --landscape -- display the graph from left to right, instead of the default which is top to bottom
+    --aspect-ratio -- specify the desired aspect ratio of the graph (default is 8.5/11)
+
 ## Usage
 
 ```
-    $ ./roslaunch-to-dot.py --help
-    usage: roslaunch-to-dot.py [-h] [--png] [--show-node-type]
+    usage: roslaunch-to-dot.py [-h] [--landscape] [--aspect-ratio ASPECTRATIO]
+                               [--png] [--disable-groups] [--show-node-type]
                                [--show-rosparam-nodes]
                                launchFile outputFile [arg [arg ...]]
 
@@ -63,6 +68,11 @@ Anywhere in the provided launch file (i.e., example.launch) that the "test_arg" 
 
     optional arguments:
       -h, --help            show this help message and exit
+      --landscape           display the nodes from left to right instead of top to
+                            bottom
+      --aspect-ratio ASPECTRATIO
+                            the approximate aspect ratio desired (default =
+                            8.5/11)
       --png                 automatically convert the dot file to a PNG
       --disable-groups      don't group nodes/launch files based on their package
       --show-node-type      label ROS nodes with their type in addition to their
