@@ -823,7 +823,11 @@ class LaunchFile:
                     argSubs = self.__getSubstitutionArgs(paramFile)
 
                 # Determine what ROS package contains the rosparam file
-                package = rospkg.get_package_name(paramFile)
+                package = rospkg.get_package_name(resolved)
+                if package is None:
+                    print "ERROR: Failed to find package for rosparam " \
+                        "file: %s" % resolved
+                    return  # Skip the file
 
                 # Create a unique name for the dot node
                 name = basename(resolved)
@@ -990,7 +994,7 @@ class LaunchFile:
         parts = env.split(" ")
         if len(parts) == 1:
             #### No default value was supplied
-            if arg not in environ:
+            if parts[0] not in environ:
                 raise Exception(
                     "Could not find environment variable: '%s'" % env)
             return environ[env]
