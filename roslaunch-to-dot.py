@@ -31,6 +31,7 @@ based on the input launch file.
 import re
 import traceback
 from sys import argv
+from copy import deepcopy
 from random import randint
 from datetime import datetime
 from os import system, environ
@@ -137,7 +138,12 @@ class LaunchFile:
     NodeColor = "#6495ed"
     TestNodeColor = "#009900"
 
-    def __init__(self, args, filename, includeArgs=None, overrideArgs=None):
+    def __init__(self,
+                 args,
+                 filename,
+                 includeArgs=None,
+                 overrideArgs=None,
+                 ancestors=None):
         '''
         * args -- command line arguments
         * filename -- the ROS launch file
@@ -145,9 +151,16 @@ class LaunchFile:
                          that were used to resolve the name of this launch file
         * overrideArgs -- dictionary of arguments that override any
                           arguments specified in this launch file
+        * ancestors -- List of launch files which are ancestors of
+                       this launch file
 
         '''
         self.__inputArgs = args
+        self.__ancestors = [] if ancestors is None else deepcopy(ancestors)
+
+        # Include ourself as an ancestor, since references to ourself would
+        # also constitute a cycle
+        self.__ancestors.append(filename)
 
         # Cannot use dictionary in default argument because the same
         # object will get reused
@@ -700,8 +713,9 @@ class LaunchFile:
             # filename contains
             argSubs = self.__getSubstitutionArgs(filename)
 
-        # Protect against cycles in the launch file graph
-        hasVisited = (resolved in VISITED_LAUNCH_FILES)
+        # Protect against cycles in the launch file graph which occurs when a
+        # launch file includes a launch file directly in its own ancestor tree
+        hasVisited = (resolved in self.__ancestors)
         if hasVisited:
             print "ERROR: There is a cycle in the launch file " \
                 "graph from: '%s' to '%s'" % (self.__filename, resolved)
@@ -731,7 +745,8 @@ class LaunchFile:
             self.__inputArgs,
             resolved,
             includeArgs=argSubs,
-            overrideArgs=inheritedArgs)
+            overrideArgs=inheritedArgs,
+            ancestors=self.__ancestors)
 
     def __parseNodeTag(self, node):
         '''Parse the node tag from a launch file.
