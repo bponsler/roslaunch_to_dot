@@ -683,6 +683,16 @@ class LaunchFile:
         if value is not None:
             self.__args[name] = value
 
+            # Determine if the 'value' attribute was specified for this
+            # argument, if it was then we do not want to allow it to
+            # be overriden
+            valueSpecified = (self.ValueAttribute in arg.attrib)
+            if valueSpecified and name in self.__overrideArgs:
+                del self.__overrideArgs[name]  # Remove it from the override
+
+                print "WARNING: cannot override arg '%s', which has " \
+                    "already been set." % name
+
     def __parseIncludeTag(self, include):
         '''Parse the include tag from a launch file.
 
