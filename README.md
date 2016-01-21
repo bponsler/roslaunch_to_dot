@@ -50,6 +50,8 @@ Two command line options have been added to help adjust the layout of the result
     --landscape -- display the graph from left to right, instead of the default which is top to bottom
     --aspect-ratio -- specify the desired aspect ratio of the graph (default is 8.5/11)
 
+All arg name value pairs passed to the script on the command line will be displayed in a single node in the graph with a dashed border. This node will be labeled as "Command Line Arguments" and will have a single edge connecting it to the main launch file (i.e., the launch file passed to the script).
+
 ## Usage
 
 ```

@@ -149,6 +149,10 @@ class LaunchFile:
     NodeColor = "#6495ed"
     TestNodeColor = "#009900"
 
+    # Other commonly used attributes
+    LinePenWidth = "3"
+    SubgraphPenWidth = "3"
+
     def __init__(self,
                  args,
                  filename,
@@ -404,6 +408,42 @@ class LaunchFile:
             self.__createPackageSubgraph(
                 graph, packageName, packageItems, allNodeNames)
 
+        #### Create the input command line arguments node
+        if len(self.__overrideArgs) > 0:
+            # List of lines to add to the label for the command
+            # line arguments node
+            claLines = [
+                "Command Line Arguments:"  # Title
+            ]
+
+            # Add a single line to the label for the node for each arg
+            # name value pair that was specified on the command line
+            for argName, argValue in self.__overrideArgs.iteritems():
+                # Create a label each command line argument
+                label = "%s:=%s" % (argName, argValue)
+                claLines.append(label)
+
+            # Create the entire label for the node by putting each item
+            # in the list on its own line
+            label = '\n'.join(claLines)
+
+            # Create a single node for the command line arguments
+            claNodeName = "command_line_args"  # Unique name for the node
+            graph.add_node(
+                claNodeName,
+                label=label,
+                shape="rectangle",
+                style="dashed")
+
+            # Add a connection from the command line argument node
+            # to the main launch file
+            mainLaunchFileNodeName = self.getDotNodeName()
+            graph.add_edge(
+                claNodeName,
+                mainLaunchFileNodeName,
+                penwidth=self.LinePenWidth,
+                color=self.LineColor)
+
         #### Create connections between all launch files
 
         # Iterate over all packages contained in the launch tree
@@ -454,7 +494,7 @@ class LaunchFile:
                         parentNodeName,
                         includeNodeName,
                         label=label,
-                        penwidth="3",
+                        penwidth=self.LinePenWidth,
                         color=color)
 
         #### Create connections between launch files and nodes
@@ -467,7 +507,7 @@ class LaunchFile:
                 graph.add_edge(
                     launchNodeName,
                     node.dotNodeName,
-                    penwidth=3)
+                    penwidth=self.LinePenWidth)
 
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
@@ -506,7 +546,7 @@ class LaunchFile:
                             launchNodeName,
                             rosParam.dotNodeName,
                             label=label,
-                            penwidth="3",
+                            penwidth=self.LinePenWidth,
                             color=color)
 
         return graph
@@ -623,7 +663,7 @@ class LaunchFile:
                 nbunch=subgraphNodes,
                 name="cluster_" + packageName,
                 label=packageName,
-                penwidth=5)
+                penwidth=self.SubgraphPenWidth)
 
     ##### Launch file XML parsing functions
     #
@@ -1253,6 +1293,8 @@ if __name__ == '__main__':
             # create png
             graph.draw(pngFilename, prog="dot")
             print "PNG saved to: %s" % pngFilename
+
+        ##### Convert the dot file into an SVG
         if args.convertToSvg:
             print "Converting dot file into SVG..."
 
@@ -1262,6 +1304,8 @@ if __name__ == '__main__':
             # create png
             graph.draw(svgFilename, prog="dot", format="svg")
             print "SVG saved to: %s" % svgFilename
+
+        ##### Convert the dot file into an PDF
         if args.convertToPdf:
             print "Converting dot file into PDF..."
 
