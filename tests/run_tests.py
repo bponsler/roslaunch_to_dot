@@ -19,10 +19,18 @@ from test_optenv import TestOptEnv
 from test_package import TestPackage
 from test_rosparam import TestRosParam
 from test_filetypes import TestFileTypes
+from test_clargs import TestCommandLineArguments
 from test_show_node_type import TestShowNodeType
 from test_disable_groups import TestDisableGroups
 from test_nodes_same_name import TestNodesSameName
 from test_missing_launch_file import TestMissingLaunchFile
+
+# Check for the ROS environment
+try:
+    import roslib
+except:
+    print "ERROR: you must run this from the ROS environment"
+    exit(0)
 
 
 if __name__ == '__main__':
