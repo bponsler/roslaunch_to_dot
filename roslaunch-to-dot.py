@@ -74,6 +74,7 @@ Node = namedtuple("Node", [
     "nodeType",  # The type of ROS node this is
     "name",  # The name of the ROS node
     "dotNodeName",  # The name for the corresponding dot node
+    "argSubs",  # The package that contains the rosparam file
     "isTestNode"])  # True if this is a test node, False otherwise
 
 # Create a named tuple to store attributes pertaining to a rosparam file
@@ -152,6 +153,10 @@ class LaunchFile:
     # Other commonly used attributes
     LinePenWidth = "3"
     SubgraphPenWidth = "3"
+
+    # The regular expression used to match substitution arguments
+    SubArgsPattern = "\$\(([a-zA-Z_]+) ([a-zA-Z0-9_! ]+)\)"
+    FindArgsPattern = "\$\(arg ([a-zA-Z0-9_]+)\)"
 
     def __init__(self,
                  args,
@@ -504,10 +509,32 @@ class LaunchFile:
                 # Grab the dot node name of the launch file for this node
                 launchNodeName = node.launchFile.getDotNodeName()
 
+                # Check if this ROS node required any arguments to be evaluated
+                # in order to include it in the tree, and label the edge with
+                # the arguments and their values
+                label = ""
+                color = self.LineColor
+                if len(node.argSubs) > 0:
+                    # Change the color of the line to indicate that it
+                    # required arg substitutions
+                    color = self.ConditionalLineColor
+
+                    # Convert all arg name value pairs into a single
+                    # string, e.g., given {"one": "two", "three": "four"}
+                    # the resulting string should be:
+                    #    "one:=two\nthree:=four"
+                    # So that each arg pair is on its own line
+                    # for improved readability
+                    label = '\n'.join(map(
+                        lambda t: ":=".join(map(str, t)),
+                        node.argSubs.items()))
+
                 graph.add_edge(
                     launchNodeName,
                     node.dotNodeName,
-                    penwidth=self.LinePenWidth)
+                    label=label,
+                    penwidth=self.LinePenWidth,
+                    color=color)
 
         #### Create connections between launch files and rosparam files
         if self.__inputArgs.showRosParamNodes:
@@ -794,6 +821,22 @@ class LaunchFile:
             # filename contains
             argSubs = self.__getSubstitutionArgs(filename)
 
+        # If this include uses an if/unless conditional, then the args required
+        # to satisfy that condition should be included
+
+        # Handle the if attribute
+        ifArg = self.__getArgumentForConditional(include, self.IfAttribute)
+        if ifArg is not None:
+            # At this point the argument must be true
+            argSubs[ifArg] = "true"
+
+        # Handle the unless attribute
+        unlessArg = self.__getArgumentForConditional(
+            include, self.UnlessAttribute)
+        if unlessArg is not None:
+            # At this point the argument must be false
+            argSubs[unlessArg] = "false"
+
         # Protect against cycles in the launch file graph which occurs when a
         # launch file includes a launch file directly in its own ancestor tree
         hasVisited = (resolved in self.__ancestors)
@@ -853,13 +896,30 @@ class LaunchFile:
         # Check for rosparams specified under the node tag
         self.__findRosParams(node)
 
+        # Create a dictionary mapping args to values for args that are
+        # required to select this node
+        argSubs = {}
+
+        # Handle the if attribute
+        ifArg = self.__getArgumentForConditional(node, self.IfAttribute)
+        if ifArg is not None:
+            # At this point the argument must be true
+            argSubs[ifArg] = "true"
+
+        # Handle the unless attribute
+        unlessArg = self.__getArgumentForConditional(
+            node, self.UnlessAttribute)
+        if unlessArg is not None:
+            # At this point the argument must be false
+            argSubs[unlessArg] = "false"
+
         # Name for the dot node that will represent this ROS node
         # use the package, node type, and node name for the dot node name
         # to make it fully unique
         dotNodeName = "node_%s_%s_%s" % (pkg, nodeType, name)
 
         # False means this is not a test node
-        return Node(self, pkg, nodeType, name, dotNodeName, False)
+        return Node(self, pkg, nodeType, name, dotNodeName, argSubs, False)
 
     def __findRosParams(self, element):
         '''Find any and all rosparam elements specified under the given
@@ -939,13 +999,30 @@ class LaunchFile:
         nodeType = self.__resolveText(nodeType)
         name = self.__resolveText(name)
 
+        # Create a dictionary mapping args to values for args that are
+        # required to select this node
+        argSubs = {}
+
+        # Handle the if attribute
+        ifArg = self.__getArgumentForConditional(node, self.IfAttribute)
+        if ifArg is not None:
+            # At this point the argument must be true
+            argSubs[ifArg] = "true"
+
+        # Handle the unless attribute
+        unlessArg = self.__getArgumentForConditional(
+            node, self.UnlessAttribute)
+        if unlessArg is not None:
+            # At this point the argument must be false
+            argSubs[unlessArg] = "false"
+
         # Name for the dot node that will represent this ROS node
         # use the package, node type, and node name for the dot node name
         # to make it fully unique
         dotNodeName = "node_%s_%s_%s" % (pkg, nodeType, name)
 
         # True means this is a test node
-        return Node(self, pkg, nodeType, name, dotNodeName, True)
+        return Node(self, pkg, nodeType, name, dotNodeName, argSubs, True)
 
     def __parseGroupTag(self, group):
         '''Parse the group tag from a launch file.
@@ -1009,7 +1086,7 @@ class LaunchFile:
         # resolved, e.g.,:
         #    $(find package)/launch/file.launch
         #    $(find package)/launch/$(arg camera).launch
-        pattern = re.compile("\$\(([a-zA-Z_]+) ([a-zA-Z0-9_! ]+)\)")
+        pattern = re.compile(self.SubArgsPattern)
 
         # Continue until all substitution arguments in the text
         # have been resolved
@@ -1102,7 +1179,7 @@ class LaunchFile:
         '''
         # Regular expression to find an arg substitution within text:
         #    $(find package)/launch/$(arg camera).launch
-        pattern = re.compile("\$\(arg ([a-zA-Z0-9_]+)\)")
+        pattern = re.compile(self.FindArgsPattern)
 
         # Name value pair for all arg substitutions in the text
         argSubs = {}
@@ -1164,6 +1241,34 @@ class LaunchFile:
                     "Invalid value in unless attribute: %s" % unlessCase)
 
         return True  # Element is enabled
+
+    def __getArgumentForConditional(self, element, attribute):
+        '''Parse the conditional (e.g., if, unless) value for a possible
+        argument that is used to evaluate the conditional. This function
+        returns the name of the argument if one is found, or None if
+        no argument is found.
+
+        * element -- the XML element
+        * attribute -- The attribute to look up (e.g., if, unless)
+
+        '''
+        pattern = re.compile(self.SubArgsPattern)
+
+        case = element.attrib.get(attribute, None)
+        if case is not None:
+            # No need to label this conditional if it's hardcoded
+            if case not in ["true", "false", "0", "1"]:
+                # Look for substitution arguments
+                results = pattern.search(case)
+                if results is not None:
+                    fullText = results.group()
+                    subArg, argument = results.groups()
+
+                    # Support different types of substitution arguments
+                    if subArg == self.ArgSubstitutionArg:
+                        return argument
+
+        return None  # No argument
 
     def __getAttribute(self, element, attribute, default=None):
         '''Get an attribute from the given ROS launch XML element. If
