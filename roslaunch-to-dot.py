@@ -24,6 +24,8 @@ based on the input launch file.
                             the approximate aspect ratio desired (default =
                             8.5/11)
       --png                 automatically convert the dot file to a PNG
+      --svg                 automatically convert the dot file to a SVG
+      --pdf                 automatically convert the dot file to a PDF
       --disable-groups      don't group nodes/launch files based on their
                             package
       --show-node-type      label ROS nodes with their type in addition to
@@ -1161,6 +1163,14 @@ if __name__ == '__main__':
         action="store_true", default=False,
         help="automatically convert the dot file to a PNG")
     parser.add_argument(
+        "--svg", dest="convertToSvg",
+        action="store_true", default=False,
+        help="automatically convert the dot file to a SVG")
+    parser.add_argument(
+        "--pdf", dest="convertToPdf",
+        action="store_true", default=False,
+        help="automatically convert the dot file to a PDF")
+    parser.add_argument(
         "--disable-groups", dest="disableGroups",
         action="store_true", default=False,
         help="don't group nodes/launch files based on their package")
@@ -1243,3 +1253,21 @@ if __name__ == '__main__':
             # create png
             graph.draw(pngFilename, prog="dot")
             print "PNG saved to: %s" % pngFilename
+        if args.convertToSvg:
+            print "Converting dot file into SVG..."
+
+            # Use the same base name as the dot file for the svg
+            svgFilename = splitext(dotFilename)[0] + ".svg"
+
+            # create png
+            graph.draw(svgFilename, prog="dot", format="svg")
+            print "SVG saved to: %s" % svgFilename
+        if args.convertToPdf:
+            print "Converting dot file into PDF..."
+
+            # Use the same base name as the dot file for the pdf
+            pdfFilename = splitext(dotFilename)[0] + ".pdf"
+
+            # create png
+            graph.draw(pdfFilename, prog="dot", format="pdf")
+            print "PDF saved to: %s" % pdfFilename
