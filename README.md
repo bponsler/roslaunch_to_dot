@@ -54,7 +54,9 @@ Two command line options have been added to help adjust the layout of the result
 
 ```
     usage: roslaunch-to-dot.py [-h] [--landscape] [--aspect-ratio ASPECTRATIO]
-                               [--png] [--disable-groups] [--show-node-type]
+                               [--png] [--svg] [--pdf]
+                               [--disable-groups]
+                               [--show-node-type]
                                [--show-rosparam-nodes]
                                launchFile outputFile [arg [arg ...]]
 
@@ -74,6 +76,8 @@ Two command line options have been added to help adjust the layout of the result
                             the approximate aspect ratio desired (default =
                             8.5/11)
       --png                 automatically convert the dot file to a PNG
+      --svg                 automatically convert the dot file to a SVG
+      --pdf                 automatically convert the dot file to a PDF
       --disable-groups      don't group nodes/launch files based on their package
       --show-node-type      label ROS nodes with their type in addition to their
                             name
