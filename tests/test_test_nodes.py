@@ -9,9 +9,6 @@ class TestTestNodes(unittest.TestCase):
 
         status, output, graph = roslaunch_to_dot(launchFile)
 
-        print "STATUS:", status
-        print "OUTPUT:", output
-
         # Should not have failed
         self.assertEqual(status, 0)
         self.assertIsNotNone(graph)
