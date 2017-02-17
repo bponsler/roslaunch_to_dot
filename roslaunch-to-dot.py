@@ -1004,14 +1004,14 @@ class LaunchFile:
         argSubs = {}
 
         # Handle the if attribute
-        ifArg = self.__getArgumentForConditional(node, self.IfAttribute)
+        ifArg = self.__getArgumentForConditional(testNode, self.IfAttribute)
         if ifArg is not None:
             # At this point the argument must be true
             argSubs[ifArg] = "true"
 
         # Handle the unless attribute
         unlessArg = self.__getArgumentForConditional(
-            node, self.UnlessAttribute)
+            testNode, self.UnlessAttribute)
         if unlessArg is not None:
             # At this point the argument must be false
             argSubs[unlessArg] = "false"
