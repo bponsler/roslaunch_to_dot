@@ -49,6 +49,7 @@ from os.path import abspath, exists, basename, splitext, sep
 
 import roslib
 import rospkg
+from roslaunch import substitution_args
 
 try:
     import pygraphviz as gv
@@ -1082,6 +1083,18 @@ class LaunchFile:
         * text -- the text to resolve
 
         '''
+        
+        # special handling of $(eval ...)
+        if text.startswith('$(eval ') and text.endswith(')'):
+            arg = self.__args.copy()
+            arg.update(self.__overrideArgs)
+            context = {'arg':arg}
+            try:
+                return substitution_args._eval(text[7:-1], context)
+            except Exception as e:
+                print ("========== Error while parsing $(eval ... )! ==========")
+                print(e)
+        
         # Include files can contain substitution arguments that need to be
         # resolved, e.g.,:
         #    $(find package)/launch/file.launch
