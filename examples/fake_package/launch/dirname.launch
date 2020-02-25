@@ -1,0 +1,6 @@
+<launch>
+    <!-- Handle the dirname directive. Should return the path bthat this launch file is in. -->
+    <!-- New in Lunar.-->
+    <include file="$(dirname)/triplet.launch" />
+    
+</launch>
