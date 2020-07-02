@@ -24,6 +24,7 @@ from test_show_node_type import TestShowNodeType
 from test_disable_groups import TestDisableGroups
 from test_nodes_same_name import TestNodesSameName
 from test_missing_launch_file import TestMissingLaunchFile
+from test_dirname import TestDirname
 
 # Check for the ROS environment
 try:

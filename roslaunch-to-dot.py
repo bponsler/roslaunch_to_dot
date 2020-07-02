@@ -45,7 +45,7 @@ from os import system, environ
 from argparse import ArgumentParser
 from collections import namedtuple
 import xml.etree.ElementTree as ET
-from os.path import abspath, exists, basename, splitext, sep
+from os.path import abspath, exists, basename, splitext, sep, dirname
 
 import roslib
 import rospkg
@@ -136,6 +136,7 @@ class LaunchFile:
     EnvSubstitutionArg = "env"
     FindSubstitutionArg = "find"
     OptEnvSubstitutionArg = "optenv"
+    DirnameSubstitutionArg = "dirname"
 
     # Identifiers for various rosparam commands
     DumpCommand = "dump"
@@ -156,7 +157,7 @@ class LaunchFile:
     SubgraphPenWidth = "3"
 
     # The regular expression used to match substitution arguments
-    SubArgsPattern = "\$\(([a-zA-Z_]+) ([a-zA-Z0-9_! ]+)\)"
+    SubArgsPattern = "\$\(([a-zA-Z_]+) ?([a-zA-Z0-9_! ]*)\)"
     FindArgsPattern = "\$\(arg ([a-zA-Z0-9_]+)\)"
 
     def __init__(self,
@@ -209,6 +210,7 @@ class LaunchFile:
             self.EnvSubstitutionArg: self.__onEnvSubstitutionArg,
             self.OptEnvSubstitutionArg: self.__onEnvSubstitutionArg,
             self.AnonSubstitutionArg: self.__onAnonSubstitutionArg,
+            self.DirnameSubstitutionArg: self.__onDirnameSubstitutionArg,
         }
 
         # List of launch file objects which are included by the launch file
@@ -1107,7 +1109,6 @@ class LaunchFile:
         while results is not None:
             fullText = results.group()
             subArg, argument = results.groups()
-
             # Grab the function to handle this specific substitution argument
             substitutionFn = self.__substitutionArgFnMap.get(subArg, None)
             if substitutionFn is None:
@@ -1136,11 +1137,17 @@ class LaunchFile:
         # Just return the given name with a random integer attached
         return "%s-%s" % (name, randint(0, 999))
 
+    def __onDirnameSubstitutionArg(self, name):
+        '''Handle the ROS launch 'dirname' substitution argument which subsitiutes for
+        the directory of the running launch file.
+        '''
+        return abspath(dirname(self.__filename))
+
     def __onArgSubstitutionArg(self, arg):
         '''Handle the ROS launch 'arg' substitution argument which aims to
         substitute the value of a launch file argument inside of some text.
 
-        * package -- the package to find
+        * arg -- the argument to resolve
 
         '''
         # If the argument is specified in the dictionary of argument
@@ -1150,7 +1157,7 @@ class LaunchFile:
 
         # No override found, use the normal argument
         if arg not in self.__args:
-            raise Exception("Could not resolve unknown arg: '%s'" % arg)
+            raise Exception("Could not resolve unknown arg: '%s' in %s" %(arg, self.__filename))
         return self.__args[arg]
 
     def __onEnvSubstitutionArg(self, env):
