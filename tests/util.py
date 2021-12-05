@@ -1,11 +1,11 @@
 from os import environ
 from os.path import join
-from commands import getstatusoutput
+from subprocess import getstatusoutput
 
 try:
     import pygraphviz as gv
 except ImportError:
-    raise ImportError("Please run 'sudo apt-get install python-pygraphviz'")
+    raise ImportError("Please run 'sudo apt-get install python3-pygraphviz'")
 
 
 # This list must match the one from the script
@@ -16,7 +16,7 @@ LAUNCH_FILE_TYPES = [".launch", ".test", ".xml"]
 class ErrorMsg:
     CanNotFindLaunchFile = "ERROR: Can not find launch file: %s"
     CanNotLocateRosPackage = "Cannot locate installation of package %s: " \
-                             "[rospack] Error: package"
+                             "b\"[rospack] Error: package"
     Cycle = "ERROR: There is a cycle in the launch file graph from:"
     FailedToGetPackage = "Failed to get package name for: %s"
     MissingArg = "Could not resolve unknown arg: '%s'"

@@ -1,7 +1,7 @@
 '''
 Run this from the roslaunch_to_dot directory using the following command:
 
-   ROS_PACKAGE_PATH=$PWD/examples:$ROS_PACKAGE_PATH python ./tests/run_tests.py
+   ROS_PACKAGE_PATH=$PWD/examples:$ROS_PACKAGE_PATH python3 ./tests/run_tests.py
 
 '''
 import sys
@@ -30,7 +30,7 @@ from test_dirname import TestDirname
 try:
     import roslib
 except:
-    print "ERROR: you must run this from the ROS environment"
+    print("ERROR: you must run this from the ROS environment")
     exit(0)
 
 
@@ -38,13 +38,13 @@ if __name__ == '__main__':
     # Make sure we can find the examples directory
     examplesDir = join(environ.get("PWD"), "examples")
     if not exists(examplesDir):
-        print "ERROR: Must be run from the roslaunch_to_dot directory!"
+        print("ERROR: Must be run from the roslaunch_to_dot directory!")
         exit(1)
 
     # Make sure we can find the ROS package path
     rosPackagePath = environ.get("ROS_PACKAGE_PATH", None)
     if rosPackagePath is None:
-        print "ERROR: Cannot find ROS_PACKAGE_PATH!"
+        print("ERROR: Cannot find ROS_PACKAGE_PATH!")
         exit(2)
 
     # Add the examples directory to the ROS package path so that ROS
@@ -53,8 +53,8 @@ if __name__ == '__main__':
 
     # Make sure ROS can find the packages in the examples directory
     if examplesDir not in rosPackagePath:
-        print "ERROR: The roslaunch_to_dot/examples directory must be in " \
-            "your ROS_PACKAGE_PATH!"
+        print("ERROR: The roslaunch_to_dot/examples directory must be in " \
+            "your ROS_PACKAGE_PATH!")
         exit(3)
 
     # Automatically locate all items in the module that are TestCases
