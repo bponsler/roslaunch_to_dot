@@ -118,6 +118,23 @@ class TestArg(unittest.TestCase):
             numInvalid = output.count(errorMsg)
             self.assertEqual(numInvalid, 1)
 
+    def testPassAllArgs(self):
+        launchFile = "examples/fake_package/launch/pass_all_args.launch"
+
+        status, output, graph = roslaunch_to_dot(launchFile)
+
+        # Should not have failed (the error gets caught and does not propagate
+        # to the top level)
+        self.assertEqual(status, 0)
+
+        # Should not be able to find TWO launch files (one for default arg, and
+        # one for value arg)
+        numMissing = output.count(ErrorMsg.MissingLaunchFile)
+        self.assertEqual(numMissing, 2)
+
+        # The example launch file should have been included once
+        example = graph.get_node("launch_fake_package_example")
+        self.assertIsNotNone(graph)
 
 if __name__ == '__main__':
     unittest.main()
