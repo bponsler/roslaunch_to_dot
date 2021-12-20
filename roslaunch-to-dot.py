@@ -128,6 +128,7 @@ class LaunchFile:
     TypeAttribute = "type"
     UnlessAttribute = "unless"
     ValueAttribute = "value"
+    PassAllArgsAttribute = "pass_all_args"
 
     # Identifiers used as substitution arguments within a launch
     # file, e.g,. $(find package)
@@ -851,16 +852,21 @@ class LaunchFile:
         # Iterate over all children of the include tag to determine if we
         # are expected to pass any args to the included launch file.
         inheritedArgs = {}
-        for child in include:
-            if child.tag == self.ArgTag:
-                #### Found an arg that should be inherited
+        passAllArgs = self.__getAttribute(include, self.PassAllArgsAttribute, False)
+        if passAllArgs:
+            inheritedArgs = self.__args
+            inheritedArgs.update(self.__overrideArgs)
+        else:
+            for child in include:
+                if child.tag == self.ArgTag:
+                    #### Found an arg that should be inherited
 
-                # Grab (and resolve) the name and value of the arg
-                name, value = self.__parseArg(child)
+                    # Grab (and resolve) the name and value of the arg
+                    name, value = self.__parseArg(child)
 
-                # Allow the child launch file to inherit this argument
-                if value is not None:
-                    inheritedArgs[name] = value
+                    # Allow the child launch file to inherit this argument
+                    if value is not None:
+                        inheritedArgs[name] = value
 
         # Check for rosparams specified under the include tag
         self.__findRosParams(include)

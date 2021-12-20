@@ -1,0 +1,5 @@
+<launch>
+    <arg name="undefined_arg" default="example"/>
+
+    <include file="$(find fake_package)/launch/arg_error.launch" pass_all_args="true"/>
+</launch>
